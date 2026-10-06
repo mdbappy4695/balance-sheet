@@ -1,75 +1,74 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light dark" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Yearly Account Balance Sheet 2026–2029</title>
     <link rel="stylesheet" href="style.css" />
-    <script src="script.js" defer></script>
   </head>
   <body>
     <header class="hero">
-      <p class="eyebrow">Account Ledger</p>
+      <p class="eyebrow">Monthly savings · Lump sums</p>
       <h1>Yearly Account Balance Sheet</h1>
-      <p class="hero-sub">2026 – 2029 · Monthly contributions &amp; lump-sum savings</p>
-      <div class="hero-tools">
-        <span class="status stale" id="status">Cached snapshot (offline)</span>
-        <button class="refresh" id="refresh" type="button">&#8635; Refresh</button>
+      <p class="hero-sub">2026 – 2029 &middot; Live from Google Sheets</p>
+      <div class="tools">
+        <span id="status" class="status idle"><i></i><span class="st-label">Loaded from snapshot</span></span>
+        <button id="refresh" class="refresh" type="button" aria-label="Refresh from Google Sheets">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
       </div>
     </header>
 
     <main>
-      <section class="stats" id="stats" aria-label="Summary statistics"></section>
+      <section class="stats" aria-label="Summary">
+        <div class="stat accent-indigo"><p>Members</p><h2 id="stat-members">0</h2></div>
+        <div class="stat accent-green"><p>Monthly savings</p><h2 id="stat-monthly">0</h2></div>
+        <div class="stat accent-amber"><p>Lump sum</p><h2 id="stat-lump">0</h2></div>
+        <div class="stat accent-rose"><p>Grand total</p><h2 id="stat-grand">0</h2></div>
+      </section>
 
       <section class="card">
         <div class="card-head">
-          <h2>Grand Total by Member</h2>
+          <h2>Per-member savings</h2>
           <div class="legend">
-            <span class="chip chip-month">Monthly</span>
-            <span class="chip chip-lump">Lump sum</span>
+            <span class="lg"><i class="lg-sq sq-month"></i>Monthly</span>
+            <span class="lg"><i class="lg-sq sq-lump"></i>Lump sum</span>
           </div>
         </div>
-        <div class="chart" id="chart"></div>
-        <div class="chart-tip" id="chart-tip" role="tooltip" hidden></div>
+        <div id="chart" class="chart" aria-label="Per-member savings bars"></div>
       </section>
 
       <section class="card">
-        <div class="card-head">
-          <h2>Monthly Ledger</h2>
-          <label class="search">
-            <span class="search-icon">&#9906;</span>
-            <input id="search" type="search" placeholder="Search member&hellip;" autocomplete="off" />
-          </label>
-        </div>
-
-        <div class="toolbar">
-          <div class="tabs" id="tabs" role="tablist" aria-label="Select year">
-            <button class="tab active" data-tab="2026" type="button">2026</button>
-            <button class="tab" data-tab="2027" type="button">2027</button>
-            <button class="tab" data-tab="2028" type="button">2028</button>
-            <button class="tab" data-tab="2029" type="button">2029</button>
-            <button class="tab" data-tab="all" type="button">All 36 months</button>
+        <div class="card-head wrap">
+          <h2>Monthly ledger</h2>
+          <div class="search">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input id="search" type="search" placeholder="Search member…" autocomplete="off" />
           </div>
-          <p class="view-label" id="view-label"></p>
         </div>
-
+        <div class="tabs" id="tabs" role="tablist" aria-label="Year">
+          <button class="tab active" data-yr="0">2026</button>
+          <button class="tab" data-yr="1">2027</button>
+          <button class="tab" data-yr="2">2028</button>
+          <button class="tab" data-yr="3">2029</button>
+          <button class="tab" data-yr="99">All 36</button>
+        </div>
         <div class="table-wrap">
-          <table id="sheet" aria-label="Account balance sheet"></table>
+          <table id="ledger" class="ledger">
+            <colgroup id="ledger-cols"></colgroup>
+            <thead id="ledger-head"></thead>
+            <tbody id="ledger-body"></tbody>
+            <tfoot id="ledger-foot"></tfoot>
+          </table>
         </div>
-
-        <p class="note">
-          <span class="note-bn">এই কালারের ঘরে সকলের এক কালীন টাকার পরিমাণ বসানো হবে।</span>
-          <span class="note-en">Everyone&rsquo;s one-time lump-sum amount is entered in the colored cells.</span>
-        </p>
-        <p class="footnote">
-          This page auto-syncs from the source Google Sheet every 30 seconds.
-          Totals columns are cumulative for the full period (JUNE 2026 – MAY 2029).
-          Click a column header to sort.
-        </p>
+        <p class="note">এই কালারের ঘরে সকলের এক কালীন টাকার পরিমাণ বসানো হবে।</p>
       </section>
+
+      <p class="footer-note">Auto-refreshes every 30 seconds. Close this tab on your phone · works offline with the last loaded data.</p>
     </main>
 
-    <footer>Mirrored from the source Google Sheet · Works offline</footer>
+    <div id="chart-tip" class="chart-tip" role="tooltip"></div>
+    <script src="script.js"></script>
   </body>
 </html>
