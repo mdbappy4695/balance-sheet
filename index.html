@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Yearly Account Balance Sheet 2026–2029</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <header class="hero">
+      <p class="eyebrow">Account Ledger</p>
+      <h1>Yearly Account Balance Sheet</h1>
+      <p class="hero-sub">2026 – 2029 · Monthly contributions &amp; lump-sum savings</p>
+      <div class="hero-tools">
+        <span class="status stale" id="status">Cached snapshot (offline)</span>
+        <button class="refresh" id="refresh" type="button">&#8635; Refresh</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="stats" id="stats" aria-label="Summary statistics"></section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Grand Total by Member</h2>
+          <div class="legend">
+            <span class="chip chip-month">Monthly</span>
+            <span class="chip chip-lump">Lump sum</span>
+          </div>
+        </div>
+        <div class="chart" id="chart"></div>
+        <div class="chart-tip" id="chart-tip" role="tooltip" hidden></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Monthly Ledger</h2>
+          <label class="search">
+            <span class="search-icon">&#9906;</span>
+            <input id="search" type="search" placeholder="Search member&hellip;" autocomplete="off" />
+          </label>
+        </div>
+
+        <div class="toolbar">
+          <div class="tabs" id="tabs" role="tablist" aria-label="Select year">
+            <button class="tab active" data-tab="2026" type="button">2026</button>
+            <button class="tab" data-tab="2027" type="button">2027</button>
+            <button class="tab" data-tab="2028" type="button">2028</button>
+            <button class="tab" data-tab="2029" type="button">2029</button>
+            <button class="tab" data-tab="all" type="button">All 36 months</button>
+          </div>
+          <p class="view-label" id="view-label"></p>
+        </div>
+
+        <div class="table-wrap">
+          <table id="sheet" aria-label="Account balance sheet"></table>
+        </div>
+
+        <p class="note">
+          <span class="note-bn">এই কালারের ঘরে সকলের এক কালীন টাকার পরিমাণ বসানো হবে।</span>
+          <span class="note-en">Everyone&rsquo;s one-time lump-sum amount is entered in the colored cells.</span>
+        </p>
+        <p class="footnote">
+          This page auto-syncs from the source Google Sheet every 30 seconds.
+          Totals columns are cumulative for the full period (JUNE 2026 – MAY 2029).
+          Click a column header to sort.
+        </p>
+      </section>
+    </main>
+
+    <footer>Mirrored from the source Google Sheet · Works offline</footer>
+  </body>
+</html>
