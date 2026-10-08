@@ -166,6 +166,323 @@ body {
   }
 }
 
+.admin-btn {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0c4a6e;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(2, 132, 199, 0.35);
+  padding: 9px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+.admin-btn:hover {
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+body.admin-open {
+  overflow: hidden;
+}
+
+.admin-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+.admin-modal[hidden] {
+  display: none !important;
+}
+
+.admin-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.admin-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(640px, 100%);
+  margin: 12px auto 40px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 60px rgba(2, 48, 71, 0.22);
+  padding: 18px 20px 22px;
+  color: var(--ink);
+}
+
+.admin-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.admin-dialog-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.admin-icon-btn {
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--row1);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.admin-pane {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-pane[hidden] {
+  display: none !important;
+}
+
+.admin-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.admin-field {
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.admin-field.grow {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.admin-field input,
+.admin-add-row input,
+.admin-month-row input {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--row1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.admin-primary,
+.admin-secondary,
+.admin-danger,
+.admin-ghost {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 9px 16px;
+  cursor: pointer;
+  border: 0;
+}
+
+.admin-primary {
+  color: #fff;
+  background: linear-gradient(135deg, #0ea5e9, #0284c7);
+  box-shadow: 0 6px 14px rgba(2, 132, 199, 0.28);
+}
+
+.admin-primary:disabled,
+.admin-secondary:disabled,
+.admin-danger:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.admin-secondary {
+  color: var(--brand);
+  background: rgba(2, 132, 199, 0.1);
+  border: 1px solid rgba(2, 132, 199, 0.3);
+}
+
+.admin-danger {
+  color: #fff;
+  background: linear-gradient(135deg, #f87171, #dc2626);
+}
+
+.admin-ghost {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.admin-error {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b91c1c;
+}
+
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-status {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  min-height: 1.2em;
+}
+
+.admin-status.ok {
+  color: #047857;
+}
+
+.admin-status.err {
+  color: #b91c1c;
+}
+
+.admin-section {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  background: var(--row2);
+}
+
+.admin-section h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.admin-section[hidden] {
+  display: none !important;
+}
+
+.admin-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-add-row input {
+  flex: 1 1 180px;
+}
+
+.admin-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.admin-member-item {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.admin-member-item:hover,
+.admin-member-item.active {
+  border-color: var(--brand);
+  background: rgba(2, 132, 199, 0.08);
+}
+
+.admin-sl {
+  color: var(--muted);
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.admin-empty {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px;
+}
+
+.admin-edit-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.admin-month-grid {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.admin-month-row {
+  display: grid;
+  grid-template-columns: 88px 1fr 1fr;
+  gap: 8px;
+  align-items: end;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.admin-month-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--brand);
+  padding-bottom: 10px;
+}
+
+.admin-month-row label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.admin-month-row input {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
 main {
   max-width: 1200px;
   margin: -36px auto 0;
@@ -241,6 +558,106 @@ main {
 .accent-green { --accent: var(--sky-600); }
 .accent-amber { --accent: var(--gold-deep); }
 .accent-rose { --accent: var(--sky-700); }
+
+/* ---- unpaid dues alert ---- */
+.dues-alert {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-left: 4px solid var(--gold-deep);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0;
+  min-width: 0;
+}
+
+.dues-alert[hidden] {
+  display: none !important;
+}
+
+.dues-alert-inner {
+  padding: 16px 18px;
+}
+
+.dues-alert-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dues-alert-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--gold-ink);
+}
+
+.dues-alert-sub {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: #92400e;
+  opacity: 0.9;
+}
+
+.dues-dismiss {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--gold-ink);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(217, 119, 6, 0.4);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background 0.12s ease;
+}
+
+.dues-dismiss:hover {
+  background: #fff;
+}
+
+.dues-alert-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.dues-alert-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #78350f;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(217, 119, 6, 0.2);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.dues-alert-list li strong {
+  color: var(--gold-ink);
+  font-weight: 800;
+}
+
+.dues-meta {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.dues-owed {
+  flex: 0 0 auto;
+  font-weight: 800;
+  color: #b45309;
+  white-space: nowrap;
+}
 
 .legend {
   display: flex;
@@ -588,6 +1005,29 @@ table.ledger {
   border: 1px solid rgba(217, 119, 6, 0.35);
 }
 
+.chip-due {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid rgba(185, 28, 28, 0.35);
+}
+
+.ledger tbody td.due-cell {
+  background: #fff1f2 !important;
+}
+
+.ledger tbody tr:nth-child(even) td.due-cell {
+  background: #ffe4e6 !important;
+}
+
+.ledger tbody tr:hover td.due-cell {
+  background: #fecdd3 !important;
+}
+
 .ledger tfoot td {
   background: var(--foot-bg);
   font-weight: 800;
@@ -708,6 +1148,96 @@ table.ledger {
     border-color: rgba(245, 158, 11, 0.4);
   }
 
+  .dues-alert {
+    background: linear-gradient(135deg, #3a2e12 0%, #422f0a 100%);
+    border-color: rgba(251, 191, 36, 0.35);
+    border-left-color: #fbbf24;
+  }
+
+  .dues-alert-head h2 {
+    color: #fde68a;
+  }
+
+  .dues-alert-sub {
+    color: #fbbf24;
+  }
+
+  .dues-dismiss {
+    color: #fde68a;
+    background: rgba(15, 21, 34, 0.45);
+    border-color: rgba(251, 191, 36, 0.4);
+  }
+
+  .dues-dismiss:hover {
+    background: rgba(15, 21, 34, 0.7);
+  }
+
+  .dues-alert-list li {
+    color: #fde68a;
+    background: rgba(15, 21, 34, 0.35);
+    border-color: rgba(251, 191, 36, 0.22);
+  }
+
+  .dues-alert-list li strong {
+    color: #fbbf24;
+  }
+
+  .dues-owed {
+    color: #fbbf24;
+  }
+
+  .admin-btn {
+    color: #e0f2fe;
+    background: rgba(10, 30, 52, 0.55);
+    border-color: rgba(56, 189, 248, 0.4);
+  }
+
+  .admin-btn:hover {
+    background: rgba(10, 30, 52, 0.8);
+  }
+
+  .admin-backdrop {
+    background: rgba(2, 6, 23, 0.7);
+  }
+
+  .admin-status.ok {
+    color: #6ee7b7;
+  }
+
+  .admin-status.err,
+  .admin-error {
+    color: #fca5a5;
+  }
+
+  .admin-member-item:hover,
+  .admin-member-item.active {
+    background: rgba(56, 189, 248, 0.12);
+  }
+
+  .admin-secondary {
+    color: #7dd3fc;
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.35);
+  }
+
+  .chip-due {
+    color: #fecaca;
+    background: rgba(185, 28, 28, 0.28);
+    border-color: rgba(248, 113, 113, 0.45);
+  }
+
+  .ledger tbody td.due-cell {
+    background: rgba(127, 29, 29, 0.35) !important;
+  }
+
+  .ledger tbody tr:nth-child(even) td.due-cell {
+    background: rgba(127, 29, 29, 0.45) !important;
+  }
+
+  .ledger tbody tr:hover td.due-cell {
+    background: rgba(153, 27, 27, 0.55) !important;
+  }
+
   .seg-month {
     background: linear-gradient(180deg, #0ea5e9, #38bdf8);
   }
@@ -727,6 +1257,15 @@ table.ledger {
 }
 
 @media (max-width: 640px) {
+  .admin-month-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-month-label {
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+  }
+
   main {
     padding: 0 12px 40px;
     gap: 14px;
@@ -849,10 +1388,13 @@ table.ledger {
 
   .tools,
   .refresh,
+  .admin-btn,
+  .admin-modal,
   .search,
   .tabs,
   .card-head,
   .chart,
+  .dues-alert,
   .note,
   .footer-note {
     display: none;

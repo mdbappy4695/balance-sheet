@@ -17,6 +17,7 @@
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           Refresh
         </button>
+        <button id="admin-open" class="admin-btn" type="button">Admin</button>
       </div>
     </header>
 
@@ -26,6 +27,19 @@
         <div class="stat accent-green"><p>Monthly savings</p><h2 id="stat-monthly">0</h2></div>
         <div class="stat accent-amber"><p>Lump sum</p><h2 id="stat-lump">0</h2></div>
         <div class="stat accent-rose"><p>Grand total</p><h2 id="stat-grand">0</h2></div>
+      </section>
+
+      <section id="dues-alert" class="dues-alert" hidden aria-live="polite">
+        <div class="dues-alert-inner">
+          <div class="dues-alert-head">
+            <div>
+              <h2 id="dues-alert-title">Pending monthly dues</h2>
+              <p class="dues-alert-sub">চলতি মাস বাদে বকেয়া মাসিক সঞ্চয় (আনুমানিক) · Estimated dues · current month excluded</p>
+            </div>
+            <button id="dues-alert-dismiss" class="dues-dismiss" type="button" aria-label="Dismiss alert">Dismiss</button>
+          </div>
+          <ul id="dues-alert-list" class="dues-alert-list"></ul>
+        </div>
       </section>
 
       <section class="card">
@@ -69,6 +83,58 @@
     </main>
 
     <div id="chart-tip" class="chart-tip" role="tooltip"></div>
+
+    <div id="admin-modal" class="admin-modal" hidden>
+      <div class="admin-backdrop" data-admin-close></div>
+      <div class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title">
+        <div class="admin-dialog-head">
+          <h2 id="admin-dialog-title">Admin</h2>
+          <button type="button" class="admin-icon-btn" data-admin-close aria-label="Close">&times;</button>
+        </div>
+
+        <div id="admin-login" class="admin-pane">
+          <p class="admin-hint">Enter the admin password to edit the Google Sheet.</p>
+          <label class="admin-field">
+            <span>Password</span>
+            <input id="admin-password" type="password" autocomplete="current-password" />
+          </label>
+          <p id="admin-login-error" class="admin-error" hidden></p>
+          <button id="admin-login-btn" class="admin-primary" type="button">Unlock</button>
+        </div>
+
+        <div id="admin-panel" class="admin-pane" hidden>
+          <div class="admin-toolbar">
+            <p id="admin-status" class="admin-status" aria-live="polite"></p>
+            <button id="admin-logout" class="admin-ghost" type="button">Lock</button>
+          </div>
+
+          <section class="admin-section">
+            <h3>Members</h3>
+            <div class="admin-add-row">
+              <input id="admin-new-name" type="text" placeholder="New member name" maxlength="80" />
+              <button id="admin-add-member" class="admin-primary" type="button">Add</button>
+            </div>
+            <ul id="admin-member-list" class="admin-member-list"></ul>
+          </section>
+
+          <section id="admin-edit" class="admin-section" hidden>
+            <h3>Edit member</h3>
+            <div class="admin-edit-head">
+              <label class="admin-field grow">
+                <span>Name</span>
+                <input id="admin-edit-name" type="text" maxlength="80" />
+              </label>
+              <button id="admin-rename" class="admin-secondary" type="button">Rename</button>
+              <button id="admin-delete" class="admin-danger" type="button">Delete</button>
+            </div>
+            <p class="admin-hint">Monthly + lump for each month (current month included; future months stay blank).</p>
+            <div id="admin-month-grid" class="admin-month-grid"></div>
+            <button id="admin-save-payments" class="admin-primary" type="button">Save payments</button>
+          </section>
+        </div>
+      </div>
+    </div>
+
     <script src="script.js"></script>
   </body>
 </html>

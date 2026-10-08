@@ -11,6 +11,11 @@
     SHEET_ID +
     "/gviz/tq?tqx=out:json;responseHandler:CB&gid=0";
 
+  /* Paste your Apps Script web app URL after deploy. Must match ADMIN_PASSWORD in Code.gs */
+  var ADMIN_API_URL = "";
+  var ADMIN_PASSWORD = "change-me";
+  var ADMIN_SESSION_KEY = "admin-unlocked";
+
   var TOTAL_MONTHS = 36;
   var START_YEAR = 2026; // June
   var START_MONTH = 5; // 0-based
@@ -51,7 +56,8 @@
     year: 0,
     query: "",
     sortKey: "",
-    sortDir: 1
+    sortDir: 1,
+    adminSelectedSl: null
   };
 
   var els = {
@@ -69,8 +75,32 @@
     body: document.getElementById("ledger-body"),
     foot: document.getElementById("ledger-foot"),
     cols: document.getElementById("ledger-cols"),
-    tip: document.getElementById("chart-tip")
+    tip: document.getElementById("chart-tip"),
+    duesAlert: document.getElementById("dues-alert"),
+    duesList: document.getElementById("dues-alert-list"),
+    duesTitle: document.getElementById("dues-alert-title"),
+    duesDismiss: document.getElementById("dues-alert-dismiss"),
+    adminOpen: document.getElementById("admin-open"),
+    adminModal: document.getElementById("admin-modal"),
+    adminLogin: document.getElementById("admin-login"),
+    adminPanel: document.getElementById("admin-panel"),
+    adminPassword: document.getElementById("admin-password"),
+    adminLoginBtn: document.getElementById("admin-login-btn"),
+    adminLoginError: document.getElementById("admin-login-error"),
+    adminLogout: document.getElementById("admin-logout"),
+    adminStatus: document.getElementById("admin-status"),
+    adminMemberList: document.getElementById("admin-member-list"),
+    adminNewName: document.getElementById("admin-new-name"),
+    adminAddMember: document.getElementById("admin-add-member"),
+    adminEdit: document.getElementById("admin-edit"),
+    adminEditName: document.getElementById("admin-edit-name"),
+    adminRename: document.getElementById("admin-rename"),
+    adminDelete: document.getElementById("admin-delete"),
+    adminMonthGrid: document.getElementById("admin-month-grid"),
+    adminSavePayments: document.getElementById("admin-save-payments")
   };
+
+  var DUES_DISMISS_KEY = "dues-alert-dismissed";
 
   /* ---------- helpers ---------- */
 
@@ -398,6 +428,7 @@
     els.head.insertAdjacentHTML("beforeend", mRow);
 
     // body
+    var runningIdx = currentMonthIndex();
     var list = filteredMembers();
     var rowsHtml = "";
     list.forEach(function (mm) {
@@ -406,11 +437,20 @@
       for (var i = m0; i < mN; i++) {
         var p = paidAt(mm, i);
         var inner = "";
+        var dueCell = false;
         if (p && p.amt > 0) {
           inner += "<span class='chip-month'>" + nf(p.amt) + "</span>";
           if (p.lump > 0) inner += "<span class='chip-lump'>L" + nf(p.lump) + "</span>";
+        } else if (i < runningIdx) {
+          inner = "<span class='chip-due'>Due</span>";
+          dueCell = true;
         }
-        cells += "<td>" + (inner ? "<span class='mc'>" + inner + "</span>" : "") + "</td>";
+        cells +=
+          "<td" +
+          (dueCell ? " class='due-cell'" : "") +
+          ">" +
+          (inner ? "<span class='mc'>" + inner + "</span>" : "") +
+          "</td>";
       }
       var t = memberTotals(mm, y);
       cells += "<td class='tt'>" + nf(t.monthly) + "</td>";
@@ -461,8 +501,114 @@
     });
   }
 
+  /* ---------- unpaid dues (skip running month) ---------- */
+
+  function currentMonthIndex() {
+    var now = new Date();
+    var y = now.getFullYear();
+    var m = now.getMonth();
+    var startAbs = START_YEAR * 12 + START_MONTH;
+    var nowAbs = y * 12 + m;
+    return nowAbs - startAbs;
+  }
+
+  function groupTypicalMonthly() {
+    var counts = {};
+    var bestAmt = 2000;
+    var bestN = 0;
+    state.members.forEach(function (mm) {
+      mm.paid.forEach(function (p) {
+        if (!(p.amt > 0)) return;
+        var key = String(p.amt);
+        counts[key] = (counts[key] || 0) + 1;
+        if (counts[key] > bestN) {
+          bestN = counts[key];
+          bestAmt = p.amt;
+        }
+      });
+    });
+    return bestAmt;
+  }
+
+  function typicalMonthly(member) {
+    var latest = 0;
+    var latestM = -1;
+    member.paid.forEach(function (p) {
+      if (p.amt > 0 && p.m >= latestM) {
+        latestM = p.m;
+        latest = p.amt;
+      }
+    });
+    if (latest > 0) return latest;
+    return groupTypicalMonthly();
+  }
+
+  function unpaidMembers() {
+    var running = currentMonthIndex();
+    var endExclusive;
+    if (running <= 0) return [];
+    if (running >= TOTAL_MONTHS) endExclusive = TOTAL_MONTHS;
+    else endExclusive = running;
+
+    var out = [];
+    state.members.forEach(function (mm) {
+      var missed = [];
+      for (var mi = 0; mi < endExclusive; mi++) {
+        var p = paidAt(mm, mi);
+        if (!p || !(p.amt > 0)) missed.push(MONTH_LABELS[mi]);
+      }
+      if (missed.length > 0) {
+        var rate = typicalMonthly(mm);
+        out.push({
+          sl: mm.sl,
+          name: mm.name,
+          missed: missed,
+          missedCount: missed.length,
+          owed: missed.length * rate
+        });
+      }
+    });
+    out.sort(function (a, b) { return a.sl - b.sl; });
+    return out;
+  }
+
+  function renderDuesAlert() {
+    if (!els.duesAlert) return;
+    var dismissed = false;
+    try {
+      dismissed = sessionStorage.getItem(DUES_DISMISS_KEY) === "1";
+    } catch (e) { /* ignore */ }
+
+    var list = unpaidMembers();
+    if (dismissed || list.length === 0) {
+      els.duesAlert.hidden = true;
+      els.duesList.innerHTML = "";
+      return;
+    }
+
+    els.duesTitle.textContent =
+      list.length === 1
+        ? "1 member has pending monthly dues"
+        : list.length + " members have pending monthly dues";
+
+    var html = "";
+    list.forEach(function (u) {
+      html +=
+        "<li><span class='dues-meta'><strong>" +
+        escapeHtml(u.name) +
+        "</strong> — " +
+        escapeHtml(u.missed.join(", ")) +
+        "</span><span class='dues-owed'>Due ৳" +
+        nf(u.owed) +
+        "</span></li>";
+    });
+    els.duesList.innerHTML = html;
+    els.duesAlert.hidden = false;
+  }
+
   function render() {
     renderStats();
+    renderDuesAlert();
     renderChart();
     buildTable();
   }
@@ -531,6 +677,335 @@
     });
   }
 
+  function initDuesDismiss() {
+    if (!els.duesDismiss) return;
+    els.duesDismiss.addEventListener("click", function () {
+      try {
+        sessionStorage.setItem(DUES_DISMISS_KEY, "1");
+      } catch (e) { /* ignore */ }
+      els.duesAlert.hidden = true;
+    });
+  }
+
+  /* ---------- admin ---------- */
+
+  function isAdminUnlocked() {
+    try {
+      return sessionStorage.getItem(ADMIN_SESSION_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function setAdminUnlocked(on) {
+    try {
+      if (on) sessionStorage.setItem(ADMIN_SESSION_KEY, "1");
+      else sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    } catch (e) { /* ignore */ }
+  }
+
+  function setAdminStatus(msg, kind) {
+    if (!els.adminStatus) return;
+    els.adminStatus.textContent = msg || "";
+    els.adminStatus.className = "admin-status" + (kind ? " " + kind : "");
+  }
+
+  function showAdminLoginError(msg) {
+    if (!els.adminLoginError) return;
+    if (!msg) {
+      els.adminLoginError.hidden = true;
+      els.adminLoginError.textContent = "";
+      return;
+    }
+    els.adminLoginError.hidden = false;
+    els.adminLoginError.textContent = msg;
+  }
+
+  function openAdminModal() {
+    if (!els.adminModal) return;
+    els.adminModal.hidden = false;
+    document.body.classList.add("admin-open");
+    if (isAdminUnlocked()) showAdminPanel();
+    else showAdminLogin();
+  }
+
+  function closeAdminModal() {
+    if (!els.adminModal) return;
+    els.adminModal.hidden = true;
+    document.body.classList.remove("admin-open");
+  }
+
+  function showAdminLogin() {
+    els.adminLogin.hidden = false;
+    els.adminPanel.hidden = true;
+    showAdminLoginError("");
+    if (els.adminPassword) {
+      els.adminPassword.value = "";
+      els.adminPassword.focus();
+    }
+  }
+
+  function showAdminPanel() {
+    els.adminLogin.hidden = true;
+    els.adminPanel.hidden = false;
+    setAdminStatus("");
+    renderAdminMemberList();
+    if (state.adminSelectedSl != null) selectAdminMember(state.adminSelectedSl);
+    else {
+      els.adminEdit.hidden = true;
+      els.adminMonthGrid.innerHTML = "";
+    }
+  }
+
+  function adminRequest(action, payload, cb) {
+    if (!ADMIN_API_URL) {
+      cb({ ok: false, error: "Set ADMIN_API_URL in script.js (Apps Script web app URL)" });
+      return;
+    }
+    var body = {};
+    Object.keys(payload || {}).forEach(function (k) {
+      body[k] = payload[k];
+    });
+    body.action = action;
+    body.password = ADMIN_PASSWORD;
+
+    fetch(ADMIN_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(body),
+      redirect: "follow"
+    })
+      .then(function (r) {
+        return r.text().then(function (txt) {
+          try {
+            return JSON.parse(txt);
+          } catch (e) {
+            throw new Error("Bad response from admin API");
+          }
+        });
+      })
+      .then(function (data) {
+        cb(data && typeof data === "object" ? data : { ok: false, error: "Empty response" });
+      })
+      .catch(function (err) {
+        cb({ ok: false, error: err && err.message ? err.message : "Network error" });
+      });
+  }
+
+  function refreshAfterWrite(cb) {
+    fetchMembers(function (list, kind) {
+      applyLive(list, kind);
+      renderAdminMemberList();
+      if (state.adminSelectedSl != null) selectAdminMember(state.adminSelectedSl);
+      if (cb) cb();
+    });
+  }
+
+  function findMemberBySl(sl) {
+    for (var i = 0; i < state.members.length; i++) {
+      if (state.members[i].sl === sl) return state.members[i];
+    }
+    return null;
+  }
+
+  function renderAdminMemberList() {
+    if (!els.adminMemberList) return;
+    var html = "";
+    var list = state.members.slice().sort(function (a, b) { return a.sl - b.sl; });
+    list.forEach(function (mm) {
+      var active = state.adminSelectedSl === mm.sl ? " active" : "";
+      html +=
+        '<li><button type="button" class="admin-member-item' +
+        active +
+        '" data-sl="' +
+        mm.sl +
+        '"><span class="admin-sl">#' +
+        mm.sl +
+        "</span> " +
+        escapeHtml(mm.name) +
+        "</button></li>";
+    });
+    els.adminMemberList.innerHTML = html || '<li class="admin-empty">No members</li>';
+  }
+
+  function maxEditableMonth() {
+    var running = currentMonthIndex();
+    if (running < 0) return -1;
+    if (running >= TOTAL_MONTHS) return TOTAL_MONTHS - 1;
+    return running;
+  }
+
+  function selectAdminMember(sl) {
+    state.adminSelectedSl = sl;
+    var mm = findMemberBySl(sl);
+    renderAdminMemberList();
+    if (!mm) {
+      els.adminEdit.hidden = true;
+      return;
+    }
+    els.adminEdit.hidden = false;
+    els.adminEditName.value = mm.name;
+    var maxM = maxEditableMonth();
+    var html = "";
+    for (var m = 0; m < TOTAL_MONTHS; m++) {
+      if (m > maxM) break;
+      var p = paidAt(mm, m);
+      var amt = p && p.amt > 0 ? p.amt : "";
+      var lump = p && p.lump > 0 ? p.lump : "";
+      html +=
+        '<div class="admin-month-row" data-m="' +
+        m +
+        '"><span class="admin-month-label">' +
+        escapeHtml(MONTH_LABELS[m]) +
+        '</span><label><span>Monthly</span><input type="number" min="0" step="1" class="admin-amt" value="' +
+        amt +
+        '" /></label><label><span>Lump</span><input type="number" min="0" step="1" class="admin-lump" value="' +
+        lump +
+        '" /></label></div>';
+    }
+    if (!html) {
+      html = '<p class="admin-hint">Scheme not started yet — no months to edit.</p>';
+    }
+    els.adminMonthGrid.innerHTML = html;
+  }
+
+  function initAdmin() {
+    if (!els.adminOpen || !els.adminModal) return;
+
+    els.adminOpen.addEventListener("click", openAdminModal);
+
+    els.adminModal.addEventListener("click", function (e) {
+      if (e.target.closest("[data-admin-close]")) closeAdminModal();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && els.adminModal && !els.adminModal.hidden) closeAdminModal();
+    });
+
+    els.adminLoginBtn.addEventListener("click", function () {
+      var pw = (els.adminPassword.value || "").trim();
+      if (pw !== ADMIN_PASSWORD) {
+        showAdminLoginError("Wrong password");
+        return;
+      }
+      if (!ADMIN_API_URL) {
+        showAdminLoginError("Set ADMIN_API_URL in script.js after deploying Apps Script");
+        return;
+      }
+      setAdminUnlocked(true);
+      showAdminPanel();
+      setAdminStatus("Unlocked — edits write to Google Sheet", "ok");
+    });
+
+    els.adminPassword.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") els.adminLoginBtn.click();
+    });
+
+    els.adminLogout.addEventListener("click", function () {
+      setAdminUnlocked(false);
+      state.adminSelectedSl = null;
+      showAdminLogin();
+    });
+
+    els.adminMemberList.addEventListener("click", function (e) {
+      var btn = e.target.closest(".admin-member-item");
+      if (!btn) return;
+      selectAdminMember(parseInt(btn.dataset.sl, 10));
+    });
+
+    els.adminAddMember.addEventListener("click", function () {
+      var name = (els.adminNewName.value || "").trim();
+      if (!name) {
+        setAdminStatus("Enter a member name", "err");
+        return;
+      }
+      els.adminAddMember.disabled = true;
+      setAdminStatus("Adding…");
+      adminRequest("addMember", { name: name }, function (res) {
+        els.adminAddMember.disabled = false;
+        if (!res.ok) {
+          setAdminStatus(res.error || "Add failed", "err");
+          return;
+        }
+        els.adminNewName.value = "";
+        setAdminStatus("Added " + name, "ok");
+        refreshAfterWrite(function () {
+          if (res.sl) selectAdminMember(res.sl);
+        });
+      });
+    });
+
+    els.adminRename.addEventListener("click", function () {
+      if (state.adminSelectedSl == null) return;
+      var name = (els.adminEditName.value || "").trim();
+      if (!name) {
+        setAdminStatus("Name required", "err");
+        return;
+      }
+      els.adminRename.disabled = true;
+      setAdminStatus("Renaming…");
+      adminRequest("renameMember", { sl: state.adminSelectedSl, name: name }, function (res) {
+        els.adminRename.disabled = false;
+        if (!res.ok) {
+          setAdminStatus(res.error || "Rename failed", "err");
+          return;
+        }
+        setAdminStatus("Renamed to " + name, "ok");
+        refreshAfterWrite();
+      });
+    });
+
+    els.adminDelete.addEventListener("click", function () {
+      if (state.adminSelectedSl == null) return;
+      var mm = findMemberBySl(state.adminSelectedSl);
+      var label = mm ? mm.name : "#" + state.adminSelectedSl;
+      if (!window.confirm("Delete member " + label + "? This cannot be undone.")) return;
+      els.adminDelete.disabled = true;
+      setAdminStatus("Deleting…");
+      adminRequest("deleteMember", { sl: state.adminSelectedSl }, function (res) {
+        els.adminDelete.disabled = false;
+        if (!res.ok) {
+          setAdminStatus(res.error || "Delete failed", "err");
+          return;
+        }
+        state.adminSelectedSl = null;
+        els.adminEdit.hidden = true;
+        setAdminStatus("Deleted " + label, "ok");
+        refreshAfterWrite();
+      });
+    });
+
+    els.adminSavePayments.addEventListener("click", function () {
+      if (state.adminSelectedSl == null) return;
+      var payments = [];
+      els.adminMonthGrid.querySelectorAll(".admin-month-row").forEach(function (row) {
+        var m = parseInt(row.dataset.m, 10);
+        var amtEl = row.querySelector(".admin-amt");
+        var lumpEl = row.querySelector(".admin-lump");
+        var amt = amtEl && amtEl.value !== "" ? Number(amtEl.value) : 0;
+        var lump = lumpEl && lumpEl.value !== "" ? Number(lumpEl.value) : 0;
+        if (isNaN(amt)) amt = 0;
+        if (isNaN(lump)) lump = 0;
+        payments.push({ m: m, amt: amt, lump: lump });
+      });
+      els.adminSavePayments.disabled = true;
+      setAdminStatus("Saving payments…");
+      adminRequest(
+        "setPayments",
+        { sl: state.adminSelectedSl, payments: payments },
+        function (res) {
+          els.adminSavePayments.disabled = false;
+          if (!res.ok) {
+            setAdminStatus(res.error || "Save failed", "err");
+            return;
+          }
+          setAdminStatus("Payments saved", "ok");
+          refreshAfterWrite();
+        }
+      );
+    });
+  }
+
   function init() {
     render();
     initTooltip();
@@ -538,6 +1013,8 @@
     initSearch();
     initSort();
     initRefresh();
+    initDuesDismiss();
+    initAdmin();
     setInterval(function () {
       fetchMembers(function (list, kind) { applyLive(list, kind); });
     }, 30000);
