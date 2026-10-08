@@ -96,7 +96,11 @@
     adminEditName: document.getElementById("admin-edit-name"),
     adminRename: document.getElementById("admin-rename"),
     adminDelete: document.getElementById("admin-delete"),
-    adminMonthGrid: document.getElementById("admin-month-grid"),
+    adminBulkNames: document.getElementById("admin-bulk-names"),
+    adminBulkMonths: document.getElementById("admin-bulk-months"),
+    adminBulkYears: document.getElementById("admin-bulk-years"),
+    adminBulkAmt: document.getElementById("admin-bulk-amt"),
+    adminBulkLump: document.getElementById("admin-bulk-lump"),
     adminSavePayments: document.getElementById("admin-save-payments")
   };
 
@@ -663,8 +667,16 @@
     });
   }
 
+  function shouldSkipLiveSync() {
+    return !ADMIN_API_URL && isAdminUnlocked();
+  }
+
   function initRefresh() {
     els.refresh.addEventListener("click", function () {
+      if (shouldSkipLiveSync()) {
+        setStatus("idle", "Local admin mode — refresh paused");
+        return;
+      }
       els.refresh.disabled = true;
       els.refresh.classList.add("spin");
       fetchMembers(function (list, kind) {
@@ -750,16 +762,72 @@
     els.adminPanel.hidden = false;
     setAdminStatus("");
     renderAdminMemberList();
+    fillBulkNameOptions();
     if (state.adminSelectedSl != null) selectAdminMember(state.adminSelectedSl);
-    else {
-      els.adminEdit.hidden = true;
-      els.adminMonthGrid.innerHTML = "";
+    else els.adminEdit.hidden = true;
+  }
+
+  function nextLocalSl() {
+    var max = 0;
+    state.members.forEach(function (mm) {
+      if (mm.sl > max) max = mm.sl;
+    });
+    return max + 1;
+  }
+
+  function applyLocalAdmin(action, payload) {
+    if (action === "addMember") {
+      var name = String(payload.name || "").trim();
+      if (!name) return { ok: false, error: "Name required" };
+      var sl = nextLocalSl();
+      state.members.push({ sl: sl, name: name, paid: [] });
+      return { ok: true, sl: sl, name: name, local: true };
     }
+    if (action === "renameMember") {
+      var mm = findMemberBySl(parseInt(payload.sl, 10));
+      if (!mm) return { ok: false, error: "Member not found" };
+      var newName = String(payload.name || "").trim();
+      if (!newName) return { ok: false, error: "Name required" };
+      mm.name = newName;
+      return { ok: true, sl: mm.sl, name: newName, local: true };
+    }
+    if (action === "deleteMember") {
+      var delSl = parseInt(payload.sl, 10);
+      var before = state.members.length;
+      state.members = state.members.filter(function (m) { return m.sl !== delSl; });
+      if (state.members.length === before) return { ok: false, error: "Member not found" };
+      return { ok: true, sl: delSl, local: true };
+    }
+    if (action === "setPayments") {
+      var target = findMemberBySl(parseInt(payload.sl, 10));
+      if (!target) return { ok: false, error: "Member not found" };
+      var payments = payload.payments || [];
+      var byM = {};
+      target.paid.forEach(function (p) { byM[p.m] = { m: p.m, amt: p.amt, lump: p.lump || 0 }; });
+      payments.forEach(function (p) {
+        var m = parseInt(p.m, 10);
+        var amt = Number(p.amt) || 0;
+        var lump = Number(p.lump) || 0;
+        if (amt > 0 || lump > 0) byM[m] = { m: m, amt: amt, lump: lump };
+        else delete byM[m];
+      });
+      target.paid = Object.keys(byM)
+        .map(function (k) { return byM[k]; })
+        .sort(function (a, b) { return a.m - b.m; });
+      return { ok: true, sl: target.sl, count: payments.length, local: true };
+    }
+    if (action === "setPayment") {
+      return applyLocalAdmin("setPayments", {
+        sl: payload.sl,
+        payments: [{ m: payload.m, amt: payload.amt, lump: payload.lump }]
+      });
+    }
+    return { ok: false, error: "Unknown action" };
   }
 
   function adminRequest(action, payload, cb) {
     if (!ADMIN_API_URL) {
-      cb({ ok: false, error: "Set ADMIN_API_URL in script.js (Apps Script web app URL)" });
+      cb(applyLocalAdmin(action, payload || {}));
       return;
     }
     var body = {};
@@ -793,6 +861,13 @@
   }
 
   function refreshAfterWrite(cb) {
+    if (!ADMIN_API_URL) {
+      render();
+      renderAdminMemberList();
+      if (state.adminSelectedSl != null) selectAdminMember(state.adminSelectedSl);
+      if (cb) cb();
+      return;
+    }
     fetchMembers(function (list, kind) {
       applyLive(list, kind);
       renderAdminMemberList();
@@ -826,13 +901,30 @@
         "</button></li>";
     });
     els.adminMemberList.innerHTML = html || '<li class="admin-empty">No members</li>';
+    fillBulkNameOptions();
   }
 
-  function maxEditableMonth() {
-    var running = currentMonthIndex();
-    if (running < 0) return -1;
-    if (running >= TOTAL_MONTHS) return TOTAL_MONTHS - 1;
-    return running;
+  function fillBulkNameOptions() {
+    if (!els.adminBulkNames) return;
+    var selected = {};
+    Array.prototype.forEach.call(els.adminBulkNames.selectedOptions || [], function (opt) {
+      selected[opt.value] = true;
+    });
+    var html = "";
+    state.members
+      .slice()
+      .sort(function (a, b) { return a.sl - b.sl; })
+      .forEach(function (mm) {
+        html +=
+          '<option value="' +
+          mm.sl +
+          '"' +
+          (selected[String(mm.sl)] ? " selected" : "") +
+          ">" +
+          escapeHtml(mm.name) +
+          "</option>";
+      });
+    els.adminBulkNames.innerHTML = html;
   }
 
   function selectAdminMember(sl) {
@@ -845,28 +937,57 @@
     }
     els.adminEdit.hidden = false;
     els.adminEditName.value = mm.name;
-    var maxM = maxEditableMonth();
-    var html = "";
-    for (var m = 0; m < TOTAL_MONTHS; m++) {
-      if (m > maxM) break;
-      var p = paidAt(mm, m);
-      var amt = p && p.amt > 0 ? p.amt : "";
-      var lump = p && p.lump > 0 ? p.lump : "";
-      html +=
-        '<div class="admin-month-row" data-m="' +
-        m +
-        '"><span class="admin-month-label">' +
-        escapeHtml(MONTH_LABELS[m]) +
-        '</span><label><span>Monthly</span><input type="number" min="0" step="1" class="admin-amt" value="' +
-        amt +
-        '" /></label><label><span>Lump</span><input type="number" min="0" step="1" class="admin-lump" value="' +
-        lump +
-        '" /></label></div>';
+  }
+
+  function selectedMultiValues(selectEl) {
+    var out = [];
+    if (!selectEl) return out;
+    Array.prototype.forEach.call(selectEl.selectedOptions || [], function (opt) {
+      out.push(opt.value);
+    });
+    return out;
+  }
+
+  function monthIndexFor(calMonth, year) {
+    var labelNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+    var label = labelNames[calMonth] + " " + year;
+    for (var i = 0; i < MONTH_LABELS.length; i++) {
+      if (MONTH_LABELS[i] === label) return i;
     }
-    if (!html) {
-      html = '<p class="admin-hint">Scheme not started yet — no months to edit.</p>';
+    return -1;
+  }
+
+  function expandBulkMonthIndexes(monthVals, yearVals) {
+    var idxs = [];
+    var skipped = 0;
+    monthVals.forEach(function (mv) {
+      var calM = parseInt(mv, 10);
+      yearVals.forEach(function (yv) {
+        var y = parseInt(yv, 10);
+        var idx = monthIndexFor(calM, y);
+        if (idx < 0) skipped++;
+        else if (idxs.indexOf(idx) === -1) idxs.push(idx);
+      });
+    });
+    idxs.sort(function (a, b) { return a - b; });
+    return { indexes: idxs, skipped: skipped };
+  }
+
+  function saveBulkPaymentsForMembers(slList, payments, done) {
+    var i = 0;
+    var errors = [];
+    function next() {
+      if (i >= slList.length) {
+        done(errors);
+        return;
+      }
+      var sl = slList[i++];
+      adminRequest("setPayments", { sl: sl, payments: payments }, function (res) {
+        if (!res.ok) errors.push((findMemberBySl(sl) || {}).name || "#" + sl);
+        next();
+      });
     }
-    els.adminMonthGrid.innerHTML = html;
+    next();
   }
 
   function initAdmin() {
@@ -888,13 +1009,13 @@
         showAdminLoginError("Wrong password");
         return;
       }
-      if (!ADMIN_API_URL) {
-        showAdminLoginError("Set ADMIN_API_URL in script.js after deploying Apps Script");
-        return;
-      }
       setAdminUnlocked(true);
       showAdminPanel();
-      setAdminStatus("Unlocked — edits write to Google Sheet", "ok");
+      if (ADMIN_API_URL) {
+        setAdminStatus("Unlocked — edits write to Google Sheet", "ok");
+      } else {
+        setAdminStatus("Local mode — edits stay in this browser only (no Apps Script URL yet)", "ok");
+      }
     });
 
     els.adminPassword.addEventListener("keydown", function (e) {
@@ -976,33 +1097,53 @@
     });
 
     els.adminSavePayments.addEventListener("click", function () {
-      if (state.adminSelectedSl == null) return;
-      var payments = [];
-      els.adminMonthGrid.querySelectorAll(".admin-month-row").forEach(function (row) {
-        var m = parseInt(row.dataset.m, 10);
-        var amtEl = row.querySelector(".admin-amt");
-        var lumpEl = row.querySelector(".admin-lump");
-        var amt = amtEl && amtEl.value !== "" ? Number(amtEl.value) : 0;
-        var lump = lumpEl && lumpEl.value !== "" ? Number(lumpEl.value) : 0;
-        if (isNaN(amt)) amt = 0;
-        if (isNaN(lump)) lump = 0;
-        payments.push({ m: m, amt: amt, lump: lump });
+      var nameVals = selectedMultiValues(els.adminBulkNames);
+      var monthVals = selectedMultiValues(els.adminBulkMonths);
+      var yearVals = selectedMultiValues(els.adminBulkYears);
+      if (nameVals.length === 0) {
+        setAdminStatus("Select at least one name", "err");
+        return;
+      }
+      if (monthVals.length === 0) {
+        setAdminStatus("Select at least one month", "err");
+        return;
+      }
+      if (yearVals.length === 0) {
+        setAdminStatus("Select at least one year", "err");
+        return;
+      }
+      var expanded = expandBulkMonthIndexes(monthVals, yearVals);
+      if (expanded.indexes.length === 0) {
+        setAdminStatus("No valid months in range (JUN 2026 – MAY 2029)", "err");
+        return;
+      }
+      var amt = els.adminBulkAmt.value !== "" ? Number(els.adminBulkAmt.value) : 0;
+      var lump = els.adminBulkLump.value !== "" ? Number(els.adminBulkLump.value) : 0;
+      if (isNaN(amt)) amt = 0;
+      if (isNaN(lump)) lump = 0;
+      var payments = expanded.indexes.map(function (m) {
+        return { m: m, amt: amt, lump: lump };
       });
+      var slList = nameVals.map(function (v) { return parseInt(v, 10); });
       els.adminSavePayments.disabled = true;
       setAdminStatus("Saving payments…");
-      adminRequest(
-        "setPayments",
-        { sl: state.adminSelectedSl, payments: payments },
-        function (res) {
-          els.adminSavePayments.disabled = false;
-          if (!res.ok) {
-            setAdminStatus(res.error || "Save failed", "err");
-            return;
-          }
-          setAdminStatus("Payments saved", "ok");
-          refreshAfterWrite();
+      saveBulkPaymentsForMembers(slList, payments, function (errors) {
+        els.adminSavePayments.disabled = false;
+        if (errors.length === slList.length) {
+          setAdminStatus("Save failed for all selected members", "err");
+          return;
         }
-      );
+        var msg =
+          "Saved for " +
+          (slList.length - errors.length) +
+          " member(s), " +
+          expanded.indexes.length +
+          " month(s)";
+        if (expanded.skipped > 0) msg += " · skipped " + expanded.skipped + " out-of-range combo(s)";
+        if (errors.length) msg += " · failed: " + errors.join(", ");
+        setAdminStatus(msg, errors.length ? "err" : "ok");
+        refreshAfterWrite();
+      });
     });
   }
 
@@ -1016,6 +1157,7 @@
     initDuesDismiss();
     initAdmin();
     setInterval(function () {
+      if (shouldSkipLiveSync()) return;
       fetchMembers(function (list, kind) { applyLive(list, kind); });
     }, 30000);
   }

@@ -279,8 +279,8 @@ body.admin-open {
 }
 
 .admin-field input,
-.admin-add-row input,
-.admin-month-row input {
+.admin-field select,
+.admin-add-row input {
   font: inherit;
   font-size: 14px;
   font-weight: 600;
@@ -290,6 +290,11 @@ body.admin-open {
   border-radius: 10px;
   padding: 10px 12px;
   width: 100%;
+}
+
+.admin-field select[multiple] {
+  min-height: 140px;
+  padding: 6px;
 }
 
 .admin-primary,
@@ -444,43 +449,21 @@ body.admin-open {
   gap: 8px;
 }
 
-.admin-month-grid {
+.admin-bulk-grid {
   display: grid;
-  gap: 8px;
-  max-height: 280px;
-  overflow-y: auto;
-  padding-right: 2px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.admin-month-row {
+.admin-bulk-amounts {
   display: grid;
-  grid-template-columns: 88px 1fr 1fr;
-  gap: 8px;
-  align-items: end;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 10px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
-.admin-month-label {
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--brand);
-  padding-bottom: 10px;
-}
-
-.admin-month-row label {
-  display: grid;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.admin-month-row input {
-  padding: 8px 10px;
-  font-size: 13px;
+.admin-field select[multiple] option {
+  padding: 4px 6px;
+  border-radius: 4px;
 }
 
 main {
@@ -1257,13 +1240,16 @@ table.ledger {
 }
 
 @media (max-width: 640px) {
-  .admin-month-row {
-    grid-template-columns: 1fr 1fr;
+  .admin-bulk-grid {
+    grid-template-columns: 1fr;
   }
 
-  .admin-month-label {
-    grid-column: 1 / -1;
-    padding-bottom: 0;
+  .admin-bulk-amounts {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-field select[multiple] {
+    min-height: 120px;
   }
 
   main {

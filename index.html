@@ -121,14 +121,59 @@
             <h3>Edit member</h3>
             <div class="admin-edit-head">
               <label class="admin-field grow">
-                <span>Name</span>
+                <span>Rename</span>
                 <input id="admin-edit-name" type="text" maxlength="80" />
               </label>
               <button id="admin-rename" class="admin-secondary" type="button">Rename</button>
               <button id="admin-delete" class="admin-danger" type="button">Delete</button>
             </div>
-            <p class="admin-hint">Monthly + lump for each month (current month included; future months stay blank).</p>
-            <div id="admin-month-grid" class="admin-month-grid"></div>
+          </section>
+
+          <section class="admin-section">
+            <h3>Enter payments</h3>
+            <p class="admin-hint">Select one or more names, months, and years (Ctrl/Cmd-click or multi-tap). Same monthly + lump apply to every valid combo (JUN 2026 – MAY 2029).</p>
+            <div class="admin-bulk-grid">
+              <label class="admin-field">
+                <span>Name</span>
+                <select id="admin-bulk-names" multiple size="6" aria-label="Select members"></select>
+              </label>
+              <label class="admin-field">
+                <span>Month</span>
+                <select id="admin-bulk-months" multiple size="6" aria-label="Select months">
+                  <option value="0">JAN</option>
+                  <option value="1">FEB</option>
+                  <option value="2">MAR</option>
+                  <option value="3">APR</option>
+                  <option value="4">MAY</option>
+                  <option value="5">JUN</option>
+                  <option value="6">JUL</option>
+                  <option value="7">AUG</option>
+                  <option value="8">SEP</option>
+                  <option value="9">OCT</option>
+                  <option value="10">NOV</option>
+                  <option value="11">DEC</option>
+                </select>
+              </label>
+              <label class="admin-field">
+                <span>Year</span>
+                <select id="admin-bulk-years" multiple size="4" aria-label="Select years">
+                  <option value="2026">2026</option>
+                  <option value="2027">2027</option>
+                  <option value="2028">2028</option>
+                  <option value="2029">2029</option>
+                </select>
+              </label>
+            </div>
+            <div class="admin-bulk-amounts">
+              <label class="admin-field">
+                <span>Monthly</span>
+                <input id="admin-bulk-amt" type="number" min="0" step="1" placeholder="0" />
+              </label>
+              <label class="admin-field">
+                <span>Lump</span>
+                <input id="admin-bulk-lump" type="number" min="0" step="1" placeholder="0" />
+              </label>
+            </div>
             <button id="admin-save-payments" class="admin-primary" type="button">Save payments</button>
           </section>
         </div>
