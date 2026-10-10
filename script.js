@@ -279,11 +279,27 @@
     );
   }
 
+  function parseAppsScriptJson(txt) {
+    if (looksLikeHtml(txt)) {
+      throw new Error(
+        "Apps Script needs Allow once — open /exec URL and authorize"
+      );
+    }
+    try {
+      return JSON.parse(txt);
+    } catch (e) {
+      throw new Error(
+        "Bad Apps Script response — Redeploy Web app (New version) and paste new /exec URL"
+      );
+    }
+  }
+
   function fetchMembersViaApi(cb) {
     if (!ADMIN_API_URL) {
       cb(null, "offline", "ADMIN_API_URL not set");
       return;
     }
+    // POST → doPost (list). Avoids GET/doGet so old deployments without doGet still work once list is in doPost.
     fetch(ADMIN_API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -292,19 +308,13 @@
       cache: "no-store"
     })
       .then(function (r) {
+        if (r.status === 404) {
+          throw new Error(
+            "Apps Script URL 404 — Deploy Web app again and update ADMIN_API_URL"
+          );
+        }
         return r.text().then(function (txt) {
-          if (looksLikeHtml(txt)) {
-            throw new Error(
-              "Apps Script needs Allow once — open /exec URL and authorize"
-            );
-          }
-          try {
-            return JSON.parse(txt);
-          } catch (e) {
-            throw new Error(
-              "Bad Apps Script response — Redeploy Web app (New version)"
-            );
-          }
+          return parseAppsScriptJson(txt);
         });
       })
       .then(function (data) {
@@ -323,11 +333,12 @@
         cb(data.members, "live", null);
       })
       .catch(function (err) {
-        cb(
-          null,
-          "offline",
-          err && err.message ? err.message : "Apps Script network error"
-        );
+        var msg = err && err.message ? err.message : "Apps Script network error";
+        if (msg === "Failed to fetch") {
+          msg =
+            "Apps Script unreachable — Paste Code.gs, Deploy New version (Anyone + Me), Allow once";
+        }
+        cb(null, "offline", msg);
       });
   }
 

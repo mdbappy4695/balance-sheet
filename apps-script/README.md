@@ -26,3 +26,19 @@ The website loads data through this Web app (**Execute as: Me**), so the Google 
 ## Vercel
 
 Redeploy the site after updating `script.js` / `ADMIN_API_URL`.
+
+## If the site shows Offline / Failed to fetch
+
+That almost always means the `/exec` URL is old or the deployment was never finished:
+
+1. Sheet → **Extensions → Apps Script** → paste latest [`Code.gs`](Code.gs)
+2. **Deploy → Manage deployments → ✎ → Version: New version → Deploy**  
+   (or **Deploy → New deployment** if none exists)
+3. Copy the new `/exec` URL into `ADMIN_API_URL` in `script.js`
+4. Open `/exec` in the browser once → **Allow**
+5. Redeploy Vercel
+
+Test in browser: open `YOUR_EXEC_URL` — you should see a JSON message (not “doGet not found”).  
+Then open `YOUR_EXEC_URL?action=list` — `"ok":true` and `members`.
+
+The website loads data with **POST** `{ "action": "list" }` (no password). Browser GET is only for smoke tests.
