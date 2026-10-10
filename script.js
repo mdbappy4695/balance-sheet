@@ -12,7 +12,7 @@
     "/gviz/tq?tqx=out:json;responseHandler:CB&gid=0";
 
   /* Paste your Apps Script web app URL after deploy. Must match ADMIN_PASSWORD in Code.gs */
-  var ADMIN_API_URL = "";
+  var ADMIN_API_URL = "https://script.google.com/macros/s/AKfycbywueG2jhRRehtjNatklac0pYXP6VeU7lwJgxEnHNeX4FYhYlxWYp55pNPwLw1aRQ0rQw/exec";
   var ADMIN_PASSWORD = "change-me";
   var ADMIN_SESSION_KEY = "admin-unlocked";
   var SYNC_MS = 5000;
