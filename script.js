@@ -63,7 +63,9 @@
     adminSelectedSl: null,
     lastFingerprint: "",
     syncTimer: null,
-    toastTimer: null
+    toastTimer: null,
+    ledgerCellSaveTimer: null,
+    paymentValuesLoadedKey: ""
   };
 
   var els = {
@@ -105,12 +107,18 @@
     adminEditName: document.getElementById("admin-edit-name"),
     adminRename: document.getElementById("admin-rename"),
     adminDelete: document.getElementById("admin-delete"),
-    adminBulkNames: document.getElementById("admin-bulk-names"),
-    adminBulkMonths: document.getElementById("admin-bulk-months"),
-    adminBulkYears: document.getElementById("admin-bulk-years"),
-    adminBulkAmt: document.getElementById("admin-bulk-amt"),
-    adminBulkLump: document.getElementById("admin-bulk-lump"),
-    adminSavePayments: document.getElementById("admin-save-payments"),
+    adminPayName: document.getElementById("admin-pay-name"),
+    adminPayMonth: document.getElementById("admin-pay-month"),
+    adminPayYear: document.getElementById("admin-pay-year"),
+    adminComboName: document.getElementById("admin-combo-name"),
+    adminComboMonth: document.getElementById("admin-combo-month"),
+    adminComboYear: document.getElementById("admin-combo-year"),
+    adminPaySummary: document.getElementById("admin-pay-summary"),
+    adminPayRangeErr: document.getElementById("admin-pay-range-err"),
+    adminPayValues: document.getElementById("admin-pay-values"),
+    adminPayAmt: document.getElementById("admin-pay-amt"),
+    adminPayLump: document.getElementById("admin-pay-lump"),
+    adminSavePayment: document.getElementById("admin-save-payment"),
     adminToast: document.getElementById("admin-toast")
   };
 
@@ -605,11 +613,48 @@
     return out;
   }
 
+  function parseCellAmount(val) {
+    if (val === "" || val == null) return 0;
+    var n = Number(val);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function ledgerEditCellHtml(mm, monthIdx) {
+    var p = paidAt(mm, monthIdx);
+    var amtVal = p && p.amt > 0 ? p.amt : "";
+    var lumpVal = p && p.lump > 0 ? p.lump : "";
+    var aria = escapeHtml(mm.name) + " · " + MONTH_LABELS[monthIdx];
+    return (
+      "<td class='ledger-edit-cell' data-sl='" +
+      mm.sl +
+      "' data-m='" +
+      monthIdx +
+      "' title='" +
+      escapeHtml(MONTH_LABELS[monthIdx]) +
+      "'>" +
+      "<span class='cell-edit-pair'>" +
+      "<input type='number' class='cell-amt' min='0' step='1' value='" +
+      amtVal +
+      "' aria-label='Monthly " +
+      aria +
+      "' placeholder='M' />" +
+      "<input type='number' class='cell-lump' min='0' step='1' value='" +
+      lumpVal +
+      "' aria-label='Lump " +
+      aria +
+      "' placeholder='L' />" +
+      "</span></td>"
+    );
+  }
+
   function buildTable() {
     var y = state.year;
     var range = y === 99 ? [0, TOTAL_MONTHS] : YEAR_GROUPS[y];
     var m0 = range[0];
     var mN = range[1];
+    var adminEdit = isAdminUnlocked();
+    var tableWrap = document.querySelector(".table-wrap");
+    if (tableWrap) tableWrap.classList.toggle("ledger-admin-mode", adminEdit);
 
     els.cols.innerHTML = colTemplate();
     els.head.innerHTML = "";
@@ -644,6 +689,10 @@
       var cells = "<td class='col-sl'>" + mm.sl + "</td>";
       cells += "<th class='col-name' scope='row'>" + escapeHtml(mm.name) + "</th>";
       for (var i = m0; i < mN; i++) {
+        if (adminEdit) {
+          cells += ledgerEditCellHtml(mm, i);
+          continue;
+        }
         var p = paidAt(mm, i);
         var inner = "";
         var dueCell = false;
@@ -962,7 +1011,12 @@
   }
 
   function shouldSkipLiveSync() {
-    return false;
+    var active = document.activeElement;
+    if (!active || !active.classList || !active.closest) return false;
+    if (!active.classList.contains("cell-amt") && !active.classList.contains("cell-lump")) {
+      return false;
+    }
+    return !!active.closest("#ledger-body");
   }
 
   function initRefresh() {
@@ -1032,15 +1086,245 @@
     return false;
   }
 
-  function clearBulkPaymentForm() {
-    if (els.adminBulkAmt) els.adminBulkAmt.value = "";
-    if (els.adminBulkLump) els.adminBulkLump.value = "";
-    [els.adminBulkNames, els.adminBulkMonths, els.adminBulkYears].forEach(function (sel) {
-      if (!sel) return;
-      Array.prototype.forEach.call(sel.options, function (opt) {
-        opt.selected = false;
-      });
+  var CAL_MONTH_LABELS = [
+    "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+    "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
+  ];
+  var PAY_YEARS = [2026, 2027, 2028, 2029];
+
+  function clearPaymentForm() {
+    state.paymentValuesLoadedKey = "";
+    [
+      { combo: els.adminComboName, input: els.adminPayName },
+      { combo: els.adminComboMonth, input: els.adminPayMonth },
+      { combo: els.adminComboYear, input: els.adminPayYear }
+    ].forEach(function (pair) {
+      if (pair.input) pair.input.value = "";
+      if (pair.combo) {
+        pair.combo.dataset.selectedValue = "";
+        pair.combo.dataset.selectedLabel = "";
+      }
     });
+    closeAllPaymentComboboxLists();
+    if (els.adminPayAmt) els.adminPayAmt.value = "";
+    if (els.adminPayLump) els.adminPayLump.value = "";
+    if (els.adminPaySummary) els.adminPaySummary.hidden = true;
+    if (els.adminPayRangeErr) els.adminPayRangeErr.hidden = true;
+    if (els.adminPayValues) els.adminPayValues.hidden = true;
+  }
+
+  function closeAllPaymentComboboxLists() {
+    document.querySelectorAll(".admin-combobox-list").forEach(function (ul) {
+      ul.hidden = true;
+    });
+  }
+
+  function comboboxSelected(combo) {
+    if (!combo) return null;
+    var v = combo.dataset.selectedValue;
+    if (v === undefined || v === "") return null;
+    return v;
+  }
+
+  function setComboboxSelection(combo, input, value, label) {
+    if (!combo || !input) return;
+    combo.dataset.selectedValue = String(value);
+    combo.dataset.selectedLabel = label || String(value);
+    input.value = label || String(value);
+  }
+
+  function filterMatch(query, text) {
+    var q = (query || "").trim().toLowerCase();
+    if (!q) return true;
+    return String(text).toLowerCase().indexOf(q) >= 0;
+  }
+
+  function paymentNameOptions(query) {
+    return state.members
+      .slice()
+      .sort(function (a, b) { return a.sl - b.sl; })
+      .filter(function (mm) {
+        return filterMatch(query, mm.name);
+      })
+      .map(function (mm) {
+        return { value: String(mm.sl), label: mm.name };
+      });
+  }
+
+  function paymentMonthOptions(query) {
+    var out = [];
+    for (var i = 0; i < CAL_MONTH_LABELS.length; i++) {
+      var lab = CAL_MONTH_LABELS[i];
+      if (filterMatch(query, lab)) out.push({ value: String(i), label: lab });
+    }
+    return out;
+  }
+
+  function paymentYearOptions(query) {
+    return PAY_YEARS.filter(function (y) {
+      return filterMatch(query, String(y));
+    }).map(function (y) {
+      return { value: String(y), label: String(y) };
+    });
+  }
+
+  function renderComboboxList(listEl, options) {
+    if (!listEl) return;
+    if (!options.length) {
+      listEl.innerHTML = '<li class="admin-combobox-empty" role="presentation">No matches</li>';
+      return;
+    }
+    listEl.innerHTML = options
+      .map(function (opt) {
+        return (
+          '<li role="option" tabindex="-1" data-value="' +
+          escapeHtml(opt.value) +
+          '">' +
+          escapeHtml(opt.label) +
+          "</li>"
+        );
+      })
+      .join("");
+  }
+
+  function getOptionsForCombobox(kind, query) {
+    if (kind === "name") return paymentNameOptions(query);
+    if (kind === "month") return paymentMonthOptions(query);
+    if (kind === "year") return paymentYearOptions(query);
+    return [];
+  }
+
+  function resolvePaymentPick() {
+    var slRaw = comboboxSelected(els.adminComboName);
+    var monthRaw = comboboxSelected(els.adminComboMonth);
+    var yearRaw = comboboxSelected(els.adminComboYear);
+    if (slRaw == null || monthRaw == null || yearRaw == null) return null;
+    var sl = parseInt(slRaw, 10);
+    var calMonth = parseInt(monthRaw, 10);
+    var year = parseInt(yearRaw, 10);
+    if (!sl || isNaN(calMonth) || isNaN(year)) return null;
+    var mm = findMemberBySl(sl);
+    if (!mm) return null;
+    var monthIndex = monthIndexFor(calMonth, year);
+    return {
+      sl: sl,
+      name: mm.name,
+      calMonth: calMonth,
+      year: year,
+      monthIndex: monthIndex,
+      monthLabel: CAL_MONTH_LABELS[calMonth] + " " + year
+    };
+  }
+
+  function updatePaymentValueFields() {
+    var pick = resolvePaymentPick();
+    var incomplete =
+      !comboboxSelected(els.adminComboName) ||
+      !comboboxSelected(els.adminComboMonth) ||
+      !comboboxSelected(els.adminComboYear);
+
+    if (els.adminPaySummary) els.adminPaySummary.hidden = true;
+    if (els.adminPayRangeErr) els.adminPayRangeErr.hidden = true;
+    if (els.adminPayValues) els.adminPayValues.hidden = true;
+
+    if (incomplete) {
+      state.paymentValuesLoadedKey = "";
+      return;
+    }
+
+    if (!pick || pick.monthIndex < 0) {
+      if (els.adminPayRangeErr) els.adminPayRangeErr.hidden = false;
+      state.paymentValuesLoadedKey = "";
+      return;
+    }
+
+    if (els.adminPaySummary) {
+      els.adminPaySummary.hidden = false;
+      els.adminPaySummary.textContent = pick.name + " · " + pick.monthLabel;
+    }
+    if (els.adminPayValues) els.adminPayValues.hidden = false;
+
+    var loadKey = pick.sl + "-" + pick.monthIndex;
+    if (state.paymentValuesLoadedKey === loadKey) return;
+    state.paymentValuesLoadedKey = loadKey;
+
+    var mm = findMemberBySl(pick.sl);
+    var p = mm ? paidAt(mm, pick.monthIndex) : null;
+    if (els.adminPayAmt) {
+      els.adminPayAmt.value = p && p.amt > 0 ? p.amt : "";
+    }
+    if (els.adminPayLump) {
+      els.adminPayLump.value = p && p.lump > 0 ? p.lump : "";
+    }
+  }
+
+  function onPaymentPickChange() {
+    updatePaymentValueFields();
+  }
+
+  function openComboboxList(combo) {
+    if (!combo) return;
+    var list = combo.querySelector(".admin-combobox-list");
+    var input = combo.querySelector("input");
+    if (!list || !input) return;
+    var kind = combo.dataset.kind || "";
+    renderComboboxList(list, getOptionsForCombobox(kind, input.value.trim()));
+    list.hidden = false;
+  }
+
+  function wirePaymentCombobox(combo) {
+    if (!combo) return;
+    var input = combo.querySelector("input");
+    var list = combo.querySelector(".admin-combobox-list");
+    if (!input || !list) return;
+    var kind = combo.dataset.kind || "";
+
+    input.addEventListener("focus", function () {
+      openComboboxList(combo);
+    });
+
+    input.addEventListener("input", function () {
+      combo.dataset.selectedValue = "";
+      combo.dataset.selectedLabel = "";
+      state.paymentValuesLoadedKey = "";
+      renderComboboxList(list, getOptionsForCombobox(kind, input.value.trim()));
+      list.hidden = false;
+      onPaymentPickChange();
+    });
+
+    list.addEventListener("mousedown", function (e) {
+      var li = e.target.closest("[data-value]");
+      if (!li) return;
+      e.preventDefault();
+      setComboboxSelection(combo, input, li.dataset.value, li.textContent.trim());
+      list.hidden = true;
+      onPaymentPickChange();
+    });
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        list.hidden = true;
+        input.blur();
+      }
+    });
+  }
+
+  function initPaymentComboboxes() {
+    wirePaymentCombobox(els.adminComboName);
+    wirePaymentCombobox(els.adminComboMonth);
+    wirePaymentCombobox(els.adminComboYear);
+
+    document.addEventListener("click", function (e) {
+      if (e.target.closest(".admin-combobox")) return;
+      closeAllPaymentComboboxLists();
+    });
+  }
+
+  function prefillPaymentNameFromMember(sl) {
+    var mm = findMemberBySl(sl);
+    if (!mm || !els.adminComboName || !els.adminPayName) return;
+    setComboboxSelection(els.adminComboName, els.adminPayName, mm.sl, mm.name);
+    onPaymentPickChange();
   }
 
   function showAdminLoginError(msg) {
@@ -1083,7 +1367,6 @@
     els.adminPanel.hidden = false;
     setAdminStatus("");
     renderAdminMemberList();
-    fillBulkNameOptions();
     if (state.adminSelectedSl != null) selectAdminMember(state.adminSelectedSl);
     else els.adminEdit.hidden = true;
   }
@@ -1148,6 +1431,72 @@
     });
   }
 
+  function saveLedgerCell(td) {
+    if (!td || td.dataset.saving === "1") return;
+    if (!isAdminUnlocked()) return;
+    var sl = parseInt(td.dataset.sl, 10);
+    var m = parseInt(td.dataset.m, 10);
+    if (!sl || isNaN(m)) return;
+    var mm = findMemberBySl(sl);
+    if (!mm) return;
+    var amtIn = td.querySelector(".cell-amt");
+    var lumpIn = td.querySelector(".cell-lump");
+    if (!amtIn || !lumpIn) return;
+    var amt = parseCellAmount(amtIn.value);
+    var lump = parseCellAmount(lumpIn.value);
+    var prev = paidAt(mm, m) || { amt: 0, lump: 0 };
+    if (prev.amt === amt && prev.lump === lump) return;
+    if (!requireAdminApi()) return;
+
+    td.dataset.saving = "1";
+    amtIn.disabled = true;
+    lumpIn.disabled = true;
+    adminRequest("setPayment", { sl: sl, m: m, amt: amt, lump: lump }, function (res) {
+      amtIn.disabled = false;
+      lumpIn.disabled = false;
+      td.dataset.saving = "0";
+      if (!res.ok) {
+        setAdminStatus(res.error || "Save failed", "err");
+        showAdminToast(res.error || "Save failed", "err");
+        return;
+      }
+      setAdminStatus("Saved " + mm.name + " · " + MONTH_LABELS[m], "ok");
+      showAdminToast("Saved to Google Sheet", "ok");
+      refreshAfterWrite();
+    });
+  }
+
+  function scheduleSaveLedgerCell(td) {
+    if (state.ledgerCellSaveTimer) clearTimeout(state.ledgerCellSaveTimer);
+    state.ledgerCellSaveTimer = setTimeout(function () {
+      state.ledgerCellSaveTimer = null;
+      if (!td || !td.isConnected) return;
+      if (td.contains(document.activeElement)) return;
+      saveLedgerCell(td);
+    }, 0);
+  }
+
+  function initLedgerAdminEdit() {
+    if (!els.body) return;
+    els.body.addEventListener("focusout", function (e) {
+      var inp = e.target;
+      if (!inp.classList || (!inp.classList.contains("cell-amt") && !inp.classList.contains("cell-lump"))) {
+        return;
+      }
+      var td = inp.closest(".ledger-edit-cell");
+      if (td) scheduleSaveLedgerCell(td);
+    });
+    els.body.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      var inp = e.target;
+      if (!inp.classList || (!inp.classList.contains("cell-amt") && !inp.classList.contains("cell-lump"))) {
+        return;
+      }
+      e.preventDefault();
+      inp.blur();
+    });
+  }
+
   function findMemberBySl(sl) {
     for (var i = 0; i < state.members.length; i++) {
       if (state.members[i].sl === sl) return state.members[i];
@@ -1173,30 +1522,6 @@
         "</button></li>";
     });
     els.adminMemberList.innerHTML = html || '<li class="admin-empty">No members</li>';
-    fillBulkNameOptions();
-  }
-
-  function fillBulkNameOptions() {
-    if (!els.adminBulkNames) return;
-    var selected = {};
-    Array.prototype.forEach.call(els.adminBulkNames.selectedOptions || [], function (opt) {
-      selected[opt.value] = true;
-    });
-    var html = "";
-    state.members
-      .slice()
-      .sort(function (a, b) { return a.sl - b.sl; })
-      .forEach(function (mm) {
-        html +=
-          '<option value="' +
-          mm.sl +
-          '"' +
-          (selected[String(mm.sl)] ? " selected" : "") +
-          ">" +
-          escapeHtml(mm.name) +
-          "</option>";
-      });
-    els.adminBulkNames.innerHTML = html;
   }
 
   function selectAdminMember(sl) {
@@ -1209,15 +1534,7 @@
     }
     els.adminEdit.hidden = false;
     els.adminEditName.value = mm.name;
-  }
-
-  function selectedMultiValues(selectEl) {
-    var out = [];
-    if (!selectEl) return out;
-    Array.prototype.forEach.call(selectEl.selectedOptions || [], function (opt) {
-      out.push(opt.value);
-    });
-    return out;
+    prefillPaymentNameFromMember(sl);
   }
 
   function monthIndexFor(calMonth, year) {
@@ -1227,45 +1544,6 @@
       if (MONTH_LABELS[i] === label) return i;
     }
     return -1;
-  }
-
-  function expandBulkMonthIndexes(monthVals, yearVals) {
-    var idxs = [];
-    var skipped = 0;
-    monthVals.forEach(function (mv) {
-      var calM = parseInt(mv, 10);
-      yearVals.forEach(function (yv) {
-        var y = parseInt(yv, 10);
-        var idx = monthIndexFor(calM, y);
-        if (idx < 0) skipped++;
-        else if (idxs.indexOf(idx) === -1) idxs.push(idx);
-      });
-    });
-    idxs.sort(function (a, b) { return a - b; });
-    return { indexes: idxs, skipped: skipped };
-  }
-
-  function saveBulkPaymentsForMembers(slList, payments, done) {
-    var i = 0;
-    var errors = [];
-    function next() {
-      if (i >= slList.length) {
-        done(errors);
-        return;
-      }
-      var sl = slList[i++];
-      var label = (findMemberBySl(sl) || {}).name || "#" + sl;
-      adminRequest("setPayments", { sl: sl, payments: payments }, function (res) {
-        if (!res.ok) {
-          errors.push({
-            name: label,
-            error: res.error || "Save failed"
-          });
-        }
-        next();
-      });
-    }
-    next();
   }
 
   function initAdmin() {
@@ -1289,8 +1567,9 @@
       }
       setAdminUnlocked(true);
       showAdminPanel();
+      render();
       if (ADMIN_API_URL) {
-        setAdminStatus("Unlocked — edits write to Google Sheet", "ok");
+        setAdminStatus("Unlocked — edit cells in the ledger below or use bulk save", "ok");
       } else {
         setAdminStatus(ADMIN_API_MISSING, "err");
         showAdminToast(ADMIN_API_MISSING, "err");
@@ -1305,6 +1584,7 @@
       setAdminUnlocked(false);
       state.adminSelectedSl = null;
       showAdminLogin();
+      render();
     });
 
     els.adminMemberList.addEventListener("click", function (e) {
@@ -1384,70 +1664,47 @@
       });
     });
 
-    els.adminSavePayments.addEventListener("click", function () {
-      if (!requireAdminApi()) return;
-      var nameVals = selectedMultiValues(els.adminBulkNames);
-      var monthVals = selectedMultiValues(els.adminBulkMonths);
-      var yearVals = selectedMultiValues(els.adminBulkYears);
-      if (nameVals.length === 0) {
-        setAdminStatus("Select at least one name", "err");
-        return;
-      }
-      if (monthVals.length === 0) {
-        setAdminStatus("Select at least one month", "err");
-        return;
-      }
-      if (yearVals.length === 0) {
-        setAdminStatus("Select at least one year", "err");
-        return;
-      }
-      var expanded = expandBulkMonthIndexes(monthVals, yearVals);
-      if (expanded.indexes.length === 0) {
-        setAdminStatus("No valid months in range (JUN 2026 – MAY 2029)", "err");
-        return;
-      }
-      var amt = els.adminBulkAmt.value !== "" ? Number(els.adminBulkAmt.value) : 0;
-      var lump = els.adminBulkLump.value !== "" ? Number(els.adminBulkLump.value) : 0;
-      if (isNaN(amt)) amt = 0;
-      if (isNaN(lump)) lump = 0;
-      var payments = expanded.indexes.map(function (m) {
-        return { m: m, amt: amt, lump: lump };
-      });
-      var slList = nameVals.map(function (v) { return parseInt(v, 10); });
-      els.adminSavePayments.disabled = true;
-      setAdminStatus("Saving payments to Google Sheet…");
-      saveBulkPaymentsForMembers(slList, payments, function (errors) {
-        els.adminSavePayments.disabled = false;
-        if (errors.length === slList.length) {
-          var failDetail = errors
-            .map(function (e) {
-              return e.name + ": " + e.error;
-            })
-            .join(" · ");
-          setAdminStatus(failDetail, "err");
-          showAdminToast(failDetail, "err");
+    if (els.adminSavePayment) {
+      els.adminSavePayment.addEventListener("click", function () {
+        if (!requireAdminApi()) return;
+        var pick = resolvePaymentPick();
+        if (!pick) {
+          setAdminStatus("Select name, month, and year from the lists", "err");
           return;
         }
-        var msg = "Payments saved to Google Sheet";
-        if (expanded.skipped > 0) msg += " · skipped " + expanded.skipped + " out-of-range combo(s)";
-        if (errors.length) {
-          msg +=
-            " · failed: " +
-            errors
-              .map(function (e) {
-                return e.name + " (" + e.error + ")";
-              })
-              .join(", ");
+        if (pick.monthIndex < 0) {
+          setAdminStatus("Out of range (JUN 2026 – MAY 2029)", "err");
+          return;
         }
-        setAdminStatus(msg, errors.length ? "err" : "ok");
-        showAdminToast(
-          errors.length ? msg : "Payments saved to Google Sheet",
-          errors.length ? "err" : "ok"
+        var amt = els.adminPayAmt && els.adminPayAmt.value !== "" ? Number(els.adminPayAmt.value) : 0;
+        var lump = els.adminPayLump && els.adminPayLump.value !== "" ? Number(els.adminPayLump.value) : 0;
+        if (isNaN(amt)) amt = 0;
+        if (isNaN(lump)) lump = 0;
+        els.adminSavePayment.disabled = true;
+        setAdminStatus("Saving to Google Sheet…");
+        adminRequest(
+          "setPayment",
+          { sl: pick.sl, m: pick.monthIndex, amt: amt, lump: lump },
+          function (res) {
+            els.adminSavePayment.disabled = false;
+            if (!res.ok) {
+              setAdminStatus(res.error || "Save failed", "err");
+              showAdminToast(res.error || "Save failed", "err");
+              return;
+            }
+            setAdminStatus("Saved " + pick.name + " · " + pick.monthLabel, "ok");
+            showAdminToast("Saved to Google Sheet", "ok");
+            state.paymentValuesLoadedKey = "";
+            refreshAfterWrite(function () {
+              updatePaymentValueFields();
+            });
+          }
         );
-        if (!errors.length) clearBulkPaymentForm();
-        refreshAfterWrite();
       });
-    });
+    }
+
+    initPaymentComboboxes();
+    initLedgerAdminEdit();
   }
 
   function init() {

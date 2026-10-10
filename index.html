@@ -133,50 +133,44 @@
 
           <section class="admin-section">
             <h3>Enter payments</h3>
-            <p class="admin-hint">Select one or more names, months, and years (Ctrl/Cmd-click or multi-tap). Same monthly + lump apply to every valid combo (JUN 2026 – MAY 2029).</p>
-            <div class="admin-bulk-grid">
+            <p class="admin-hint">Search name, month, and year. When the month is in range (JUN 2026 – MAY 2029), amounts appear — edit existing values or enter new ones, then save.</p>
+            <div class="admin-pay-grid">
               <label class="admin-field">
                 <span>Name</span>
-                <select id="admin-bulk-names" multiple size="6" aria-label="Select members"></select>
+                <div class="admin-combobox" id="admin-combo-name" data-kind="name">
+                  <input id="admin-pay-name" type="search" autocomplete="off" placeholder="Search member…" aria-autocomplete="list" aria-controls="admin-pay-name-list" />
+                  <ul id="admin-pay-name-list" class="admin-combobox-list" role="listbox" hidden></ul>
+                </div>
               </label>
               <label class="admin-field">
                 <span>Month</span>
-                <select id="admin-bulk-months" multiple size="6" aria-label="Select months">
-                  <option value="0">JAN</option>
-                  <option value="1">FEB</option>
-                  <option value="2">MAR</option>
-                  <option value="3">APR</option>
-                  <option value="4">MAY</option>
-                  <option value="5">JUN</option>
-                  <option value="6">JUL</option>
-                  <option value="7">AUG</option>
-                  <option value="8">SEP</option>
-                  <option value="9">OCT</option>
-                  <option value="10">NOV</option>
-                  <option value="11">DEC</option>
-                </select>
+                <div class="admin-combobox" id="admin-combo-month" data-kind="month">
+                  <input id="admin-pay-month" type="search" autocomplete="off" placeholder="e.g. OCT" aria-autocomplete="list" aria-controls="admin-pay-month-list" />
+                  <ul id="admin-pay-month-list" class="admin-combobox-list" role="listbox" hidden></ul>
+                </div>
               </label>
               <label class="admin-field">
                 <span>Year</span>
-                <select id="admin-bulk-years" multiple size="4" aria-label="Select years">
-                  <option value="2026">2026</option>
-                  <option value="2027">2027</option>
-                  <option value="2028">2028</option>
-                  <option value="2029">2029</option>
-                </select>
+                <div class="admin-combobox" id="admin-combo-year" data-kind="year">
+                  <input id="admin-pay-year" type="search" autocomplete="off" placeholder="e.g. 2026" aria-autocomplete="list" aria-controls="admin-pay-year-list" />
+                  <ul id="admin-pay-year-list" class="admin-combobox-list" role="listbox" hidden></ul>
+                </div>
               </label>
             </div>
-            <div class="admin-bulk-amounts">
+            <p id="admin-pay-summary" class="admin-pay-summary" hidden></p>
+            <p id="admin-pay-range-err" class="admin-pay-range-err" hidden>Out of range — use months from JUN 2026 through MAY 2029.</p>
+            <div id="admin-pay-values" class="admin-pay-values" hidden>
               <label class="admin-field">
                 <span>Monthly</span>
-                <input id="admin-bulk-amt" type="number" min="0" step="1" placeholder="0" />
+                <input id="admin-pay-amt" type="number" min="0" step="1" placeholder="0" />
               </label>
               <label class="admin-field">
                 <span>Lump</span>
-                <input id="admin-bulk-lump" type="number" min="0" step="1" placeholder="0" />
+                <input id="admin-pay-lump" type="number" min="0" step="1" placeholder="0" />
               </label>
             </div>
-            <button id="admin-save-payments" class="admin-primary" type="button">Save payments</button>
+            <button id="admin-save-payment" class="admin-primary" type="button">Save payment</button>
+            <p class="admin-hint admin-hint-ledger">While unlocked, you can also edit any month cell directly in the ledger table below (monthly and lump inputs save on blur or Enter).</p>
           </section>
         </div>
       </div>

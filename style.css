@@ -449,21 +449,90 @@ body.admin-open {
   gap: 8px;
 }
 
-.admin-bulk-grid {
+.admin-pay-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
-.admin-bulk-amounts {
+.admin-pay-values {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+  margin-top: 10px;
 }
 
-.admin-field select[multiple] option {
-  padding: 4px 6px;
-  border-radius: 4px;
+.admin-pay-summary {
+  margin: 10px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.admin-pay-range-err {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.admin-combobox {
+  position: relative;
+}
+
+.admin-combobox input[type="search"] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.admin-combobox-list {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: min(40vh, 220px);
+  overflow: auto;
+  background: var(--panel, #fff);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(2, 48, 71, 0.18);
+}
+
+.admin-combobox-list[hidden] {
+  display: none !important;
+}
+
+.admin-combobox-list li {
+  padding: 10px 12px;
+  min-height: 44px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.admin-combobox-list li:hover,
+.admin-combobox-list li:focus {
+  background: var(--row1, #f1f5f9);
+}
+
+.admin-combobox-list li:active {
+  background: rgba(79, 70, 229, 0.12);
+}
+
+.admin-combobox-empty {
+  color: var(--muted);
+  font-weight: 500;
+  cursor: default;
+  pointer-events: none;
 }
 
 .admin-toast {
@@ -1023,6 +1092,60 @@ table.ledger {
   gap: 2px;
 }
 
+.table-wrap.ledger-admin-mode .ledger tbody td.ledger-edit-cell {
+  padding: 4px 3px;
+  vertical-align: middle;
+  min-width: 4.5rem;
+}
+
+.cell-edit-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: stretch;
+}
+
+.ledger-edit-cell .cell-amt,
+.ledger-edit-cell .cell-lump {
+  width: 100%;
+  min-width: 3rem;
+  max-width: 4.5rem;
+  margin: 0 auto;
+  padding: 3px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--line, #cbd5e1);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--ink);
+  box-sizing: border-box;
+}
+
+.ledger-edit-cell .cell-amt:focus,
+.ledger-edit-cell .cell-lump:focus {
+  outline: 2px solid var(--brand, #4f46e5);
+  outline-offset: 1px;
+  border-color: var(--brand, #4f46e5);
+}
+
+.ledger-edit-cell .cell-amt {
+  color: var(--pay-ink, #0369a1);
+}
+
+.ledger-edit-cell .cell-lump {
+  color: var(--gold-ink, #b45309);
+}
+
+.ledger-edit-cell .cell-amt:disabled,
+.ledger-edit-cell .cell-lump:disabled {
+  opacity: 0.65;
+}
+
+.admin-hint-ledger {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
 .chip-month {
   display: inline-block;
   padding: 2px 7px;
@@ -1345,16 +1468,37 @@ table.ledger {
     opacity: 0.85;
   }
 
-  .admin-bulk-grid {
+  .admin-pay-grid {
     grid-template-columns: 1fr;
   }
 
-  .admin-bulk-amounts {
+  .admin-pay-values {
     grid-template-columns: 1fr;
   }
 
-  .admin-field select[multiple] {
-    min-height: 120px;
+  .admin-combobox input[type="search"] {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .admin-dialog {
+    width: 100%;
+    margin: 0;
+    max-height: 100dvh;
+    border-radius: 16px 16px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .admin-modal {
+    align-items: flex-end;
+  }
+
+  .admin-pane {
+    overflow-y: auto;
+    max-height: calc(100dvh - 72px);
+    -webkit-overflow-scrolling: touch;
   }
 
   main {
