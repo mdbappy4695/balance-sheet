@@ -64,8 +64,12 @@
     lastFingerprint: "",
     syncTimer: null,
     toastTimer: null,
-    ledgerCellSaveTimer: null,
-    paymentValuesLoadedKey: ""
+    ledgerCellSaveTimers: {},
+    ledgerSaveQueue: {},
+    ledgerSaveInFlight: 0,
+    pendingLiveApply: null,
+    paymentValuesLoadedKey: "",
+    ledgerResizeBound: false
   };
 
   var els = {
@@ -119,7 +123,11 @@
     adminPayAmt: document.getElementById("admin-pay-amt"),
     adminPayLump: document.getElementById("admin-pay-lump"),
     adminSavePayment: document.getElementById("admin-save-payment"),
-    adminToast: document.getElementById("admin-toast")
+    adminToast: document.getElementById("admin-toast"),
+    adminLedgerBanner: document.getElementById("admin-ledger-banner"),
+    adminLedgerBannerText: document.getElementById("admin-ledger-banner-text"),
+    adminLedgerSaveAll: document.getElementById("admin-ledger-save-all"),
+    adminLedgerCards: document.getElementById("admin-ledger-cards")
   };
 
   var DUES_DISMISS_KEY = "dues-alert-dismissed";
@@ -444,7 +452,22 @@
     return "Live · updated " + hh + ":" + mm + ":" + ss;
   }
 
-  function applyLive(list, source, errMsg) {
+  function ledgerDebounceActive() {
+    return Object.keys(state.ledgerCellSaveTimers).length > 0;
+  }
+
+  function ledgerSaveBusy() {
+    return state.ledgerSaveInFlight > 0 || ledgerDebounceActive();
+  }
+
+  function flushPendingLiveApply() {
+    if (!state.pendingLiveApply || ledgerSaveBusy()) return;
+    var p = state.pendingLiveApply;
+    state.pendingLiveApply = null;
+    applyLive(p.list, p.source, p.errMsg, true);
+  }
+
+  function applyLive(list, source, errMsg, fromPending) {
     if (!list || list.length === 0) {
       setStatus(
         "offline",
@@ -458,6 +481,11 @@
     var fp = membersFingerprint(list);
     var label = liveStatusLabel(source, errMsg);
     if (fp === state.lastFingerprint) {
+      setStatus(source === "offline" ? "offline" : "live", label);
+      return;
+    }
+    if (!fromPending && ledgerSaveBusy()) {
+      state.pendingLiveApply = { list: list, source: source, errMsg: errMsg, fp: fp };
       setStatus(source === "offline" ? "offline" : "live", label);
       return;
     }
@@ -619,11 +647,38 @@
     return isNaN(n) ? 0 : n;
   }
 
-  function ledgerEditCellHtml(mm, monthIdx) {
+  function isAdminMobileLayout() {
+    return window.matchMedia && window.matchMedia("(max-width: 767px)").matches;
+  }
+
+  function ledgerEditFieldsHtml(mm, monthIdx) {
     var p = paidAt(mm, monthIdx);
     var amtVal = p && p.amt > 0 ? p.amt : "";
     var lumpVal = p && p.lump > 0 ? p.lump : "";
     var aria = escapeHtml(mm.name) + " · " + MONTH_LABELS[monthIdx];
+    return (
+      '<span class="cell-edit-pair">' +
+      '<span class="cell-edit-row">' +
+      '<span class="cell-lab lab-m" aria-hidden="true">M</span>' +
+      '<input type="number" class="cell-amt" min="0" step="1" inputmode="numeric" value="' +
+      amtVal +
+      '" aria-label="Monthly ' +
+      aria +
+      '" placeholder="0" />' +
+      "</span>" +
+      '<span class="cell-edit-row">' +
+      '<span class="cell-lab lab-l" aria-hidden="true">L</span>' +
+      '<input type="number" class="cell-lump" min="0" step="1" inputmode="numeric" value="' +
+      lumpVal +
+      '" aria-label="Lump ' +
+      aria +
+      '" placeholder="0" />' +
+      "</span>" +
+      "</span>"
+    );
+  }
+
+  function ledgerEditCellHtml(mm, monthIdx) {
     return (
       "<td class='ledger-edit-cell' data-sl='" +
       mm.sl +
@@ -632,19 +687,89 @@
       "' title='" +
       escapeHtml(MONTH_LABELS[monthIdx]) +
       "'>" +
-      "<span class='cell-edit-pair'>" +
-      "<input type='number' class='cell-amt' min='0' step='1' value='" +
-      amtVal +
-      "' aria-label='Monthly " +
-      aria +
-      "' placeholder='M' />" +
-      "<input type='number' class='cell-lump' min='0' step='1' value='" +
-      lumpVal +
-      "' aria-label='Lump " +
-      aria +
-      "' placeholder='L' />" +
-      "</span></td>"
+      ledgerEditFieldsHtml(mm, monthIdx) +
+      "</td>"
     );
+  }
+
+  function monthChipCellHtml(mm, monthIdx, runningIdx) {
+    var p = paidAt(mm, monthIdx);
+    var inner = "";
+    var dueCell = false;
+    if (p && p.amt > 0) {
+      inner += "<span class='chip-month'>" + nf(p.amt) + "</span>";
+      if (p.lump > 0) inner += "<span class='chip-lump'>L" + nf(p.lump) + "</span>";
+    } else if (monthIdx < runningIdx) {
+      inner = "<span class='chip-due'>Due</span>";
+      dueCell = true;
+    }
+    return (
+      "<td" +
+      (dueCell ? " class='due-cell'" : "") +
+      ">" +
+      (inner ? "<span class='mc'>" + inner + "</span>" : "") +
+      "</td>"
+    );
+  }
+
+  function renderAdminLedgerCards(m0, mN) {
+    var cards = els.adminLedgerCards;
+    var banner = els.adminLedgerBanner;
+    var adminOn = isAdminUnlocked();
+    var mobile = isAdminMobileLayout();
+
+    if (banner) {
+      banner.hidden = !adminOn;
+      if (adminOn && els.adminLedgerBannerText) {
+        els.adminLedgerBannerText.textContent = mobile
+          ? "Admin edit: use the cards below (M = monthly, L = lump). Tap Save on each row or Save changes."
+          : "Admin edit: change values in the table (M = monthly, L = lump), then blur or tap Save changes.";
+      }
+    }
+    updateLedgerSaveAllButton();
+
+    if (!cards) return;
+
+    if (!adminOn || !mobile) {
+      cards.hidden = true;
+      cards.innerHTML = "";
+      return;
+    }
+
+    var list = filteredMembers();
+    if (!list.length) {
+      cards.hidden = false;
+      cards.innerHTML = '<p class="empty">No members found.</p>';
+      return;
+    }
+
+    var html = "";
+    list.forEach(function (mm) {
+      html +=
+        '<article class="admin-ledger-card">' +
+        '<h3 class="admin-ledger-card-head">#' +
+        mm.sl +
+        " · " +
+        escapeHtml(mm.name) +
+        "</h3>";
+      for (var i = m0; i < mN; i++) {
+        html +=
+          '<div class="admin-ledger-month-row">' +
+          '<div class="admin-ledger-month-label">' +
+          escapeHtml(MONTH_LABELS[i]) +
+          "</div>" +
+          '<div class="ledger-edit-cell" data-sl="' +
+          mm.sl +
+          '" data-m="' +
+          i +
+          '">' +
+          ledgerEditFieldsHtml(mm, i) +
+          '</div><button type="button" class="ledger-row-save">Save</button></div>';
+      }
+      html += "</article>";
+    });
+    cards.hidden = false;
+    cards.innerHTML = html;
   }
 
   function buildTable() {
@@ -653,8 +778,9 @@
     var m0 = range[0];
     var mN = range[1];
     var adminEdit = isAdminUnlocked();
+    var tableInlineEdit = adminEdit && !isAdminMobileLayout();
     var tableWrap = document.querySelector(".table-wrap");
-    if (tableWrap) tableWrap.classList.toggle("ledger-admin-mode", adminEdit);
+    if (tableWrap) tableWrap.classList.toggle("ledger-admin-mode", tableInlineEdit);
 
     els.cols.innerHTML = colTemplate();
     els.head.innerHTML = "";
@@ -689,26 +815,11 @@
       var cells = "<td class='col-sl'>" + mm.sl + "</td>";
       cells += "<th class='col-name' scope='row'>" + escapeHtml(mm.name) + "</th>";
       for (var i = m0; i < mN; i++) {
-        if (adminEdit) {
+        if (tableInlineEdit) {
           cells += ledgerEditCellHtml(mm, i);
-          continue;
+        } else {
+          cells += monthChipCellHtml(mm, i, runningIdx);
         }
-        var p = paidAt(mm, i);
-        var inner = "";
-        var dueCell = false;
-        if (p && p.amt > 0) {
-          inner += "<span class='chip-month'>" + nf(p.amt) + "</span>";
-          if (p.lump > 0) inner += "<span class='chip-lump'>L" + nf(p.lump) + "</span>";
-        } else if (i < runningIdx) {
-          inner = "<span class='chip-due'>Due</span>";
-          dueCell = true;
-        }
-        cells +=
-          "<td" +
-          (dueCell ? " class='due-cell'" : "") +
-          ">" +
-          (inner ? "<span class='mc'>" + inner + "</span>" : "") +
-          "</td>";
       }
       var t = memberTotals(mm, y);
       cells += "<td class='tt'>" + nf(t.monthly) + "</td>";
@@ -730,6 +841,8 @@
       th.classList.toggle("sort-asc", th.dataset.sort === state.sortKey && state.sortDir === 1);
       th.classList.toggle("sort-desc", th.dataset.sort === state.sortKey && state.sortDir === -1);
     });
+
+    renderAdminLedgerCards(m0, mN);
   }
 
   function shortLabel(label) {
@@ -1011,12 +1124,16 @@
   }
 
   function shouldSkipLiveSync() {
+    if (ledgerSaveBusy()) return true;
     var active = document.activeElement;
     if (!active || !active.classList || !active.closest) return false;
     if (!active.classList.contains("cell-amt") && !active.classList.contains("cell-lump")) {
       return false;
     }
-    return !!active.closest("#ledger-body");
+    return !!(
+      active.closest("#ledger-body") ||
+      active.closest("#admin-ledger-cards")
+    );
   }
 
   function initRefresh() {
@@ -1431,70 +1548,234 @@
     });
   }
 
-  function saveLedgerCell(td) {
-    if (!td || td.dataset.saving === "1") return;
-    if (!isAdminUnlocked()) return;
-    var sl = parseInt(td.dataset.sl, 10);
-    var m = parseInt(td.dataset.m, 10);
-    if (!sl || isNaN(m)) return;
-    var mm = findMemberBySl(sl);
-    if (!mm) return;
-    var amtIn = td.querySelector(".cell-amt");
-    var lumpIn = td.querySelector(".cell-lump");
-    if (!amtIn || !lumpIn) return;
-    var amt = parseCellAmount(amtIn.value);
-    var lump = parseCellAmount(lumpIn.value);
-    var prev = paidAt(mm, m) || { amt: 0, lump: 0 };
-    if (prev.amt === amt && prev.lump === lump) return;
-    if (!requireAdminApi()) return;
+  function ledgerCellKey(sl, m) {
+    return String(sl) + "-" + String(m);
+  }
 
-    td.dataset.saving = "1";
-    amtIn.disabled = true;
-    lumpIn.disabled = true;
-    adminRequest("setPayment", { sl: sl, m: m, amt: amt, lump: lump }, function (res) {
-      amtIn.disabled = false;
-      lumpIn.disabled = false;
-      td.dataset.saving = "0";
-      if (!res.ok) {
-        setAdminStatus(res.error || "Save failed", "err");
-        showAdminToast(res.error || "Save failed", "err");
-        return;
+  function snapshotLedgerCell(cell) {
+    if (!cell) return null;
+    var sl = parseInt(cell.dataset.sl, 10);
+    var m = parseInt(cell.dataset.m, 10);
+    if (!sl || isNaN(m)) return null;
+    var mm = findMemberBySl(sl);
+    if (!mm) return null;
+    var amtIn = cell.querySelector(".cell-amt");
+    var lumpIn = cell.querySelector(".cell-lump");
+    if (!amtIn || !lumpIn) return null;
+    return {
+      sl: sl,
+      m: m,
+      amt: parseCellAmount(amtIn.value),
+      lump: parseCellAmount(lumpIn.value),
+      name: mm.name
+    };
+  }
+
+  function ledgerPayloadChanged(payload) {
+    var mm = findMemberBySl(payload.sl);
+    if (!mm) return true;
+    var prev = paidAt(mm, payload.m) || { amt: 0, lump: 0 };
+    return Number(prev.amt) !== Number(payload.amt) || Number(prev.lump) !== Number(payload.lump);
+  }
+
+  function showLedgerSaveError(msg) {
+    setAdminStatus(msg, "err");
+    showAdminToast(msg, "err");
+    if (els.adminLedgerBannerText) {
+      els.adminLedgerBannerText.textContent = msg;
+    }
+  }
+
+  function saveLedgerPayment(payload, done) {
+    if (!payload || !isAdminUnlocked()) {
+      if (done) done(false);
+      return;
+    }
+    if (!ledgerPayloadChanged(payload)) {
+      if (done) done(true);
+      flushPendingLiveApply();
+      return;
+    }
+    if (!requireAdminApi()) {
+      if (done) done(false);
+      return;
+    }
+
+    state.ledgerSaveInFlight += 1;
+    adminRequest(
+      "setPayment",
+      { sl: payload.sl, m: payload.m, amt: payload.amt, lump: payload.lump },
+      function (res) {
+        state.ledgerSaveInFlight -= 1;
+        if (!res.ok) {
+          showLedgerSaveError(res.error || "Save failed");
+          if (done) done(false);
+          flushPendingLiveApply();
+          return;
+        }
+        var label = payload.name + " · " + MONTH_LABELS[payload.m];
+        setAdminStatus("Saved " + label, "ok");
+        showAdminToast("Saved to Google Sheet", "ok");
+        if (els.adminLedgerBannerText) {
+          els.adminLedgerBannerText.textContent = "Saved " + label;
+        }
+        state.lastFingerprint = "";
+        fetchMembers(function (list, kind, errMsg) {
+          applyLive(list, kind, errMsg, true);
+          renderAdminMemberList();
+          if (state.adminSelectedSl != null) selectAdminMember(state.adminSelectedSl);
+          updateLedgerSaveAllButton();
+          if (done) done(true);
+          flushPendingLiveApply();
+        });
       }
-      setAdminStatus("Saved " + mm.name + " · " + MONTH_LABELS[m], "ok");
-      showAdminToast("Saved to Google Sheet", "ok");
-      refreshAfterWrite();
+    );
+  }
+
+  function queueLedgerCellSave(cell, immediate) {
+    var snap = snapshotLedgerCell(cell);
+    if (!snap) return;
+    var key = ledgerCellKey(snap.sl, snap.m);
+    state.ledgerSaveQueue[key] = snap;
+    if (state.ledgerCellSaveTimers[key]) {
+      clearTimeout(state.ledgerCellSaveTimers[key]);
+    }
+    var delay = immediate ? 0 : 300;
+    state.ledgerCellSaveTimers[key] = setTimeout(function () {
+      delete state.ledgerCellSaveTimers[key];
+      var payload = state.ledgerSaveQueue[key];
+      delete state.ledgerSaveQueue[key];
+      if (!payload) return;
+      saveLedgerPayment(payload);
+    }, delay);
+    updateLedgerSaveAllButton();
+  }
+
+  function flushAllLedgerDebounces() {
+    Object.keys(state.ledgerCellSaveTimers).forEach(function (key) {
+      clearTimeout(state.ledgerCellSaveTimers[key]);
+      delete state.ledgerCellSaveTimers[key];
+    });
+    var keys = Object.keys(state.ledgerSaveQueue);
+    keys.forEach(function (key) {
+      var payload = state.ledgerSaveQueue[key];
+      delete state.ledgerSaveQueue[key];
+      if (payload) saveLedgerPayment(payload);
     });
   }
 
-  function scheduleSaveLedgerCell(td) {
-    if (state.ledgerCellSaveTimer) clearTimeout(state.ledgerCellSaveTimer);
-    state.ledgerCellSaveTimer = setTimeout(function () {
-      state.ledgerCellSaveTimer = null;
-      if (!td || !td.isConnected) return;
-      if (td.contains(document.activeElement)) return;
-      saveLedgerCell(td);
-    }, 0);
+  function allLedgerEditCells() {
+    return document.querySelectorAll(
+      "#ledger-body .ledger-edit-cell, #admin-ledger-cards .ledger-edit-cell"
+    );
   }
 
-  function initLedgerAdminEdit() {
-    if (!els.body) return;
-    els.body.addEventListener("focusout", function (e) {
+  function saveAllDirtyLedgerCells() {
+    if (!isAdminUnlocked()) return;
+    flushAllLedgerDebounces();
+    var cells = allLedgerEditCells();
+    var pending = [];
+    cells.forEach(function (cell) {
+      var snap = snapshotLedgerCell(cell);
+      if (snap && ledgerPayloadChanged(snap)) pending.push(snap);
+    });
+    if (!pending.length) {
+      showAdminToast("No changes to save", "ok");
+      return;
+    }
+    var i = 0;
+    function next() {
+      if (i >= pending.length) {
+        updateLedgerSaveAllButton();
+        return;
+      }
+      saveLedgerPayment(pending[i++], function () {
+        next();
+      });
+    }
+    next();
+  }
+
+  function updateLedgerSaveAllButton() {
+    if (!els.adminLedgerSaveAll) return;
+    var dirty = 0;
+    allLedgerEditCells().forEach(function (cell) {
+      var snap = snapshotLedgerCell(cell);
+      if (snap && ledgerPayloadChanged(snap)) dirty += 1;
+    });
+    els.adminLedgerSaveAll.classList.toggle("has-dirty", dirty > 0);
+    els.adminLedgerSaveAll.textContent =
+      dirty > 0 ? "Save changes (" + dirty + ")" : "Save changes";
+  }
+
+  function markLedgerCellDirty(cell) {
+    if (cell) cell.dataset.dirty = "1";
+    updateLedgerSaveAllButton();
+  }
+
+  function wireLedgerEditRoot(root) {
+    if (!root || root.dataset.ledgerEditWired === "1") return;
+    root.dataset.ledgerEditWired = "1";
+    root.addEventListener("focusout", function (e) {
       var inp = e.target;
       if (!inp.classList || (!inp.classList.contains("cell-amt") && !inp.classList.contains("cell-lump"))) {
         return;
       }
-      var td = inp.closest(".ledger-edit-cell");
-      if (td) scheduleSaveLedgerCell(td);
+      var cell = inp.closest(".ledger-edit-cell");
+      if (!cell) return;
+      setTimeout(function () {
+        if (cell.contains(document.activeElement)) return;
+        queueLedgerCellSave(cell, false);
+      }, 0);
     });
-    els.body.addEventListener("keydown", function (e) {
+    root.addEventListener("input", function (e) {
+      var inp = e.target;
+      if (!inp.classList || (!inp.classList.contains("cell-amt") && !inp.classList.contains("cell-lump"))) {
+        return;
+      }
+      var cell = inp.closest(".ledger-edit-cell");
+      if (cell) markLedgerCellDirty(cell);
+    });
+    root.addEventListener("keydown", function (e) {
       if (e.key !== "Enter") return;
       var inp = e.target;
       if (!inp.classList || (!inp.classList.contains("cell-amt") && !inp.classList.contains("cell-lump"))) {
         return;
       }
       e.preventDefault();
+      var cell = inp.closest(".ledger-edit-cell");
       inp.blur();
+      if (cell) queueLedgerCellSave(cell, true);
     });
+    root.addEventListener("click", function (e) {
+      var btn = e.target.closest(".ledger-row-save");
+      if (!btn) return;
+      var row = btn.closest(".admin-ledger-month-row");
+      if (!row) return;
+      var cell = row.querySelector(".ledger-edit-cell");
+      if (cell) queueLedgerCellSave(cell, true);
+    });
+  }
+
+  function initLedgerAdminEdit() {
+    wireLedgerEditRoot(els.body);
+    wireLedgerEditRoot(els.adminLedgerCards);
+    if (els.adminLedgerSaveAll && !els.adminLedgerSaveAll.dataset.wired) {
+      els.adminLedgerSaveAll.dataset.wired = "1";
+      els.adminLedgerSaveAll.addEventListener("click", function () {
+        saveAllDirtyLedgerCells();
+      });
+    }
+    if (!state.ledgerResizeBound) {
+      state.ledgerResizeBound = true;
+      var resizeTimer = null;
+      window.addEventListener("resize", function () {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+          if (isAdminUnlocked()) render();
+        }, 150);
+      });
+    }
   }
 
   function findMemberBySl(sl) {

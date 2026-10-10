@@ -1092,48 +1092,159 @@ table.ledger {
   gap: 2px;
 }
 
+.admin-ledger-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0c4a6e;
+  background: #e0f2fe;
+  border: 1px solid #7dd3fc;
+}
+
+.admin-ledger-banner[hidden] {
+  display: none !important;
+}
+
+#admin-ledger-banner-text {
+  flex: 1 1 12rem;
+  line-height: 1.4;
+}
+
+.admin-ledger-save-all {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 10px;
+  border: 1px solid #0284c7;
+  background: #0284c7;
+  color: #fff;
+  cursor: pointer;
+}
+
+.admin-ledger-save-all.has-dirty {
+  background: #0369a1;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.35);
+}
+
+.admin-ledger-save-all:active {
+  transform: scale(0.98);
+}
+
+.ledger-row-save {
+  min-height: 44px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--row2);
+  color: var(--ink);
+  cursor: pointer;
+  align-self: center;
+}
+
 .table-wrap.ledger-admin-mode .ledger tbody td.ledger-edit-cell {
-  padding: 4px 3px;
+  padding: 6px 4px;
   vertical-align: middle;
-  min-width: 4.5rem;
+  min-width: 5.25rem;
 }
 
 .cell-edit-pair {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   align-items: stretch;
 }
 
+.cell-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cell-lab {
+  flex: 0 0 auto;
+  min-width: 1rem;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #334155;
+}
+
+.cell-lab.lab-m {
+  color: #0369a1;
+}
+
+.cell-lab.lab-l {
+  color: #b45309;
+}
+
+/* Fixed high-contrast fields (ignore dark-mode --pay-ink / --gold-ink on white) */
 .ledger-edit-cell .cell-amt,
-.ledger-edit-cell .cell-lump {
+.ledger-edit-cell .cell-lump,
+#admin-pay-amt,
+#admin-pay-lump {
   width: 100%;
   min-width: 3rem;
-  max-width: 4.5rem;
-  margin: 0 auto;
-  padding: 3px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid var(--line, #cbd5e1);
-  border-radius: 5px;
-  background: #fff;
-  color: var(--ink);
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 6px;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  caret-color: #0f172a;
   box-sizing: border-box;
 }
 
-.ledger-edit-cell .cell-amt:focus,
-.ledger-edit-cell .cell-lump:focus {
-  outline: 2px solid var(--brand, #4f46e5);
-  outline-offset: 1px;
-  border-color: var(--brand, #4f46e5);
-}
-
 .ledger-edit-cell .cell-amt {
-  color: var(--pay-ink, #0369a1);
+  max-width: 4.75rem;
+  border: 1.5px solid #0284c7;
 }
 
 .ledger-edit-cell .cell-lump {
-  color: var(--gold-ink, #b45309);
+  max-width: 4.75rem;
+  border: 1.5px solid #b45309;
+}
+
+#admin-pay-amt {
+  border: 1.5px solid #0284c7;
+}
+
+#admin-pay-lump {
+  border: 1.5px solid #b45309;
+}
+
+.ledger-edit-cell .cell-amt::placeholder,
+.ledger-edit-cell .cell-lump::placeholder,
+#admin-pay-amt::placeholder,
+#admin-pay-lump::placeholder {
+  color: #64748b;
+  opacity: 1;
+  font-weight: 600;
+}
+
+.ledger-edit-cell .cell-amt:focus,
+.ledger-edit-cell .cell-lump:focus,
+#admin-pay-amt:focus,
+#admin-pay-lump:focus {
+  outline: 2px solid #0284c7;
+  outline-offset: 1px;
+}
+
+.ledger-edit-cell .cell-lump:focus,
+#admin-pay-lump:focus {
+  outline-color: #b45309;
 }
 
 .ledger-edit-cell .cell-amt:disabled,
@@ -1141,9 +1252,112 @@ table.ledger {
   opacity: 0.65;
 }
 
+.admin-ledger-cards {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.admin-ledger-cards[hidden] {
+  display: none !important;
+}
+
+.admin-ledger-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 12px;
+}
+
+.admin-ledger-card-head {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.admin-ledger-month-row {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 28%) 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.admin-ledger-month-row:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.admin-ledger-month-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.admin-ledger-month-row .cell-edit-pair {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-ledger-month-row .cell-edit-row {
+  flex: 1 1 45%;
+  min-width: 7rem;
+}
+
+.admin-ledger-month-row .cell-amt,
+.admin-ledger-month-row .cell-lump {
+  max-width: none;
+  min-height: 44px;
+  font-size: 16px;
+}
+
 .admin-hint-ledger {
   margin-top: 12px;
   margin-bottom: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .admin-ledger-banner {
+    color: #e0f2fe;
+    background: #0c4a6e;
+    border-color: #0284c7;
+  }
+
+  .admin-ledger-save-all {
+    border-color: #38bdf8;
+    background: #0284c7;
+    color: #f8fafc;
+  }
+
+  .ledger-row-save {
+    background: #18263a;
+    border-color: #24324d;
+    color: #e2e8f0;
+  }
+
+  .cell-lab {
+    color: #cbd5e1;
+  }
+
+  .cell-lab.lab-m {
+    color: #7dd3fc;
+  }
+
+  .cell-lab.lab-l {
+    color: #fbbf24;
+  }
+
+  /* Keep input surfaces light + dark text even in dark UI */
+  .ledger-edit-cell .cell-amt,
+  .ledger-edit-cell .cell-lump,
+  #admin-pay-amt,
+  #admin-pay-lump {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
 }
 
 .chip-month {
@@ -1474,6 +1688,10 @@ table.ledger {
 
   .admin-pay-values {
     grid-template-columns: 1fr;
+  }
+
+  .admin-ledger-save-all {
+    width: 100%;
   }
 
   .admin-combobox input[type="search"] {
