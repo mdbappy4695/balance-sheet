@@ -31,14 +31,15 @@
 
       <section id="dues-alert" class="dues-alert" hidden aria-live="polite">
         <div class="dues-alert-inner">
-          <div class="dues-alert-head">
-            <div>
-              <h2 id="dues-alert-title">Pending monthly dues</h2>
-              <p class="dues-alert-sub">চলতি মাস বাদে বকেয়া মাসিক সঞ্চয় (আনুমানিক) · Estimated dues · current month excluded</p>
-            </div>
-            <button id="dues-alert-dismiss" class="dues-dismiss" type="button" aria-label="Dismiss alert">Dismiss</button>
+          <button id="dues-alert-dismiss" class="dues-dismiss" type="button" aria-label="Dismiss">×</button>
+          <div class="dues-row">
+            <span id="dues-pending-label" class="dues-label due">Pending (0)</span>
+            <div id="dues-pending" class="dues-chips"></div>
           </div>
-          <ul id="dues-alert-list" class="dues-alert-list"></ul>
+          <div id="dues-paid-row" class="dues-row">
+            <span id="dues-paid-label" class="dues-label paid">Paid this month (0)</span>
+            <div id="dues-paid-month" class="dues-chips"></div>
+          </div>
         </div>
       </section>
 
@@ -79,10 +80,11 @@
         <p class="note">এই কালারের ঘরে সকলের এক কালীন টাকার পরিমাণ বসানো হবে।</p>
       </section>
 
-      <p class="footer-note">Auto-refreshes every 30 seconds. Close this tab on your phone · works offline with the last loaded data.</p>
+      <p class="footer-note">Loads live data when you open the app; auto-updates about every 5 seconds while this tab is open (no need to tap Refresh). Works offline with the last loaded data.</p>
     </main>
 
     <div id="chart-tip" class="chart-tip" role="tooltip"></div>
+    <div id="admin-toast" class="admin-toast" hidden role="status" aria-live="polite"></div>
 
     <div id="admin-modal" class="admin-modal" hidden>
       <div class="admin-backdrop" data-admin-close></div>

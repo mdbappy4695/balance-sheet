@@ -466,6 +466,37 @@ body.admin-open {
   border-radius: 4px;
 }
 
+.admin-toast {
+  position: fixed;
+  z-index: 100;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  max-width: min(920px, calc(100vw - 24px));
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+  box-shadow: 0 12px 30px rgba(2, 48, 71, 0.22);
+  pointer-events: none;
+}
+
+.admin-toast[hidden] {
+  display: none !important;
+}
+
+.admin-toast.ok {
+  color: #065f46;
+  background: #d1fae5;
+  border: 1px solid rgba(5, 150, 105, 0.35);
+}
+
+.admin-toast.err {
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid rgba(185, 28, 28, 0.35);
+}
+
 main {
   max-width: 1200px;
   margin: -36px auto 0;
@@ -542,13 +573,13 @@ main {
 .accent-amber { --accent: var(--gold-deep); }
 .accent-rose { --accent: var(--sky-700); }
 
-/* ---- unpaid dues alert ---- */
+/* ---- compact dues strip ---- */
 .dues-alert {
   background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-  border: 1px solid rgba(217, 119, 6, 0.35);
-  border-left: 4px solid var(--gold-deep);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-left: 3px solid var(--gold-deep);
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(2, 48, 71, 0.05);
   padding: 0;
   min-width: 0;
 }
@@ -558,88 +589,114 @@ main {
 }
 
 .dues-alert-inner {
-  padding: 16px 18px;
-}
-
-.dues-alert-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.dues-alert-head h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--gold-ink);
-}
-
-.dues-alert-sub {
-  margin: 4px 0 0;
-  font-size: 12.5px;
-  color: #92400e;
-  opacity: 0.9;
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 8px 32px 8px 12px;
 }
 
 .dues-dismiss {
+  position: absolute;
+  top: 4px;
+  right: 6px;
   font: inherit;
-  font-size: 12.5px;
-  font-weight: 700;
+  font-size: 16px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
   color: var(--gold-ink);
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(217, 119, 6, 0.4);
-  border-radius: 999px;
-  padding: 7px 14px;
+  background: transparent;
   cursor: pointer;
-  flex: 0 0 auto;
-  transition: background 0.12s ease;
 }
 
 .dues-dismiss:hover {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.7);
 }
 
-.dues-alert-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
-}
-
-.dues-alert-list li {
+.dues-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px 14px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: #78350f;
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(217, 119, 6, 0.2);
-  border-radius: 10px;
-  padding: 8px 12px;
-}
-
-.dues-alert-list li strong {
-  color: var(--gold-ink);
-  font-weight: 800;
-}
-
-.dues-meta {
-  flex: 1 1 180px;
+  align-items: center;
+  gap: 6px 8px;
   min-width: 0;
 }
 
-.dues-owed {
+.dues-row[hidden] {
+  display: none !important;
+}
+
+.dues-label {
   flex: 0 0 auto;
+  font-size: 11px;
   font-weight: 800;
-  color: #b45309;
+  letter-spacing: 0.2px;
   white-space: nowrap;
+  padding: 2px 0;
+}
+
+.dues-label.due {
+  color: #9a3412;
+}
+
+.dues-label.paid {
+  color: #065f46;
+}
+
+.dues-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 140px;
+}
+
+.dues-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.dues-chip-name {
+  font-weight: 800;
+}
+
+.dues-chip-m {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.dues-chip-m::before {
+  content: "·";
+  margin: 0 4px 0 2px;
+  opacity: 0.7;
+}
+
+.dues-chip.due {
+  color: #9a3412;
+  background: rgba(254, 215, 170, 0.75);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+}
+
+.dues-chip.paid {
+  color: #065f46;
+  background: rgba(167, 243, 208, 0.7);
+  border: 1px solid rgba(5, 150, 105, 0.35);
+}
+
+.dues-empty {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .legend {
@@ -1137,36 +1194,36 @@ table.ledger {
     border-left-color: #fbbf24;
   }
 
-  .dues-alert-head h2 {
-    color: #fde68a;
-  }
-
-  .dues-alert-sub {
-    color: #fbbf24;
-  }
-
   .dues-dismiss {
     color: #fde68a;
-    background: rgba(15, 21, 34, 0.45);
-    border-color: rgba(251, 191, 36, 0.4);
   }
 
   .dues-dismiss:hover {
-    background: rgba(15, 21, 34, 0.7);
+    background: rgba(15, 21, 34, 0.55);
   }
 
-  .dues-alert-list li {
+  .dues-label.due {
+    color: #fbbf24;
+  }
+
+  .dues-label.paid {
+    color: #6ee7b7;
+  }
+
+  .dues-chip.due {
     color: #fde68a;
-    background: rgba(15, 21, 34, 0.35);
-    border-color: rgba(251, 191, 36, 0.22);
+    background: rgba(180, 83, 9, 0.35);
+    border-color: rgba(251, 191, 36, 0.4);
   }
 
-  .dues-alert-list li strong {
-    color: #fbbf24;
+  .dues-chip.paid {
+    color: #a7f3d0;
+    background: rgba(6, 95, 70, 0.45);
+    border-color: rgba(52, 211, 153, 0.4);
   }
 
-  .dues-owed {
-    color: #fbbf24;
+  .dues-empty {
+    color: #94a3b8;
   }
 
   .admin-btn {
@@ -1201,6 +1258,18 @@ table.ledger {
     color: #7dd3fc;
     background: rgba(56, 189, 248, 0.12);
     border-color: rgba(56, 189, 248, 0.35);
+  }
+
+  .admin-toast.ok {
+    color: #a7f3d0;
+    background: rgba(6, 78, 59, 0.92);
+    border-color: rgba(52, 211, 153, 0.4);
+  }
+
+  .admin-toast.err {
+    color: #fecaca;
+    background: rgba(127, 29, 29, 0.92);
+    border-color: rgba(248, 113, 113, 0.4);
   }
 
   .chip-due {
@@ -1240,6 +1309,42 @@ table.ledger {
 }
 
 @media (max-width: 640px) {
+  .dues-alert-inner {
+    gap: 8px;
+    padding: 10px 28px 10px 10px;
+  }
+
+  .dues-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .dues-label {
+    font-size: 10.5px;
+  }
+
+  .dues-chips {
+    flex: 1 1 auto;
+    width: 100%;
+    gap: 5px;
+  }
+
+  .dues-chip {
+    white-space: normal;
+    line-height: 1.25;
+    border-radius: 8px;
+    font-size: 10px;
+    padding: 4px 8px;
+    max-width: calc(100% - 2px);
+  }
+
+  .dues-chip-m {
+    display: inline;
+    font-weight: 500;
+    opacity: 0.85;
+  }
+
   .admin-bulk-grid {
     grid-template-columns: 1fr;
   }

@@ -15,6 +15,9 @@
   var ADMIN_API_URL = "";
   var ADMIN_PASSWORD = "change-me";
   var ADMIN_SESSION_KEY = "admin-unlocked";
+  var SYNC_MS = 5000;
+  var ADMIN_API_MISSING =
+    "Set ADMIN_API_URL in script.js after deploying Apps Script (required to update Google Sheet)";
 
   var TOTAL_MONTHS = 36;
   var START_YEAR = 2026; // June
@@ -57,7 +60,10 @@
     query: "",
     sortKey: "",
     sortDir: 1,
-    adminSelectedSl: null
+    adminSelectedSl: null,
+    lastFingerprint: "",
+    syncTimer: null,
+    toastTimer: null
   };
 
   var els = {
@@ -77,8 +83,11 @@
     cols: document.getElementById("ledger-cols"),
     tip: document.getElementById("chart-tip"),
     duesAlert: document.getElementById("dues-alert"),
-    duesList: document.getElementById("dues-alert-list"),
-    duesTitle: document.getElementById("dues-alert-title"),
+    duesPending: document.getElementById("dues-pending"),
+    duesPendingLabel: document.getElementById("dues-pending-label"),
+    duesPaidMonth: document.getElementById("dues-paid-month"),
+    duesPaidLabel: document.getElementById("dues-paid-label"),
+    duesPaidRow: document.getElementById("dues-paid-row"),
     duesDismiss: document.getElementById("dues-alert-dismiss"),
     adminOpen: document.getElementById("admin-open"),
     adminModal: document.getElementById("admin-modal"),
@@ -101,7 +110,8 @@
     adminBulkYears: document.getElementById("admin-bulk-years"),
     adminBulkAmt: document.getElementById("admin-bulk-amt"),
     adminBulkLump: document.getElementById("admin-bulk-lump"),
-    adminSavePayments: document.getElementById("admin-save-payments")
+    adminSavePayments: document.getElementById("admin-save-payments"),
+    adminToast: document.getElementById("admin-toast")
   };
 
   var DUES_DISMISS_KEY = "dues-alert-dismissed";
@@ -275,15 +285,76 @@
       });
   }
 
-  function applyLive(list, source) {
-    if (!list || list.length === 0) return;
-    state.members = list;
-    render();
+  function membersFingerprint(list) {
+    var copy = (list || []).slice().sort(function (a, b) { return a.sl - b.sl; });
+    return JSON.stringify(
+      copy.map(function (mm) {
+        return {
+          sl: mm.sl,
+          name: mm.name,
+          paid: (mm.paid || [])
+            .slice()
+            .sort(function (a, b) { return a.m - b.m; })
+            .map(function (p) {
+              return { m: p.m, amt: p.amt || 0, lump: p.lump || 0 };
+            })
+        };
+      })
+    );
+  }
+
+  function liveStatusLabel(source) {
+    if (source === "offline") return "Offline — showing last data";
     var now = new Date();
     var hh = ("0" + now.getHours()).slice(-2);
     var mm = ("0" + now.getMinutes()).slice(-2);
     var ss = ("0" + now.getSeconds()).slice(-2);
-    setStatus(source === "offline" ? "offline" : "live", source === "offline" ? "Offline — showing last data" : "Live · updated " + hh + ":" + mm + ":" + ss);
+    return "Live · updated " + hh + ":" + mm + ":" + ss;
+  }
+
+  function applyLive(list, source) {
+    if (!list || list.length === 0) return;
+    var fp = membersFingerprint(list);
+    var label = liveStatusLabel(source);
+    if (fp === state.lastFingerprint) {
+      setStatus(source === "offline" ? "offline" : "live", label);
+      return;
+    }
+    state.lastFingerprint = fp;
+    state.members = list;
+    render();
+    setStatus(source === "offline" ? "offline" : "live", label);
+  }
+
+  function syncFromSheet() {
+    if (shouldSkipLiveSync()) return;
+    fetchMembers(function (list, kind) {
+      applyLive(list, kind);
+    });
+  }
+
+  function startSyncTimer() {
+    if (state.syncTimer) return;
+    state.syncTimer = setInterval(syncFromSheet, SYNC_MS);
+  }
+
+  function stopSyncTimer() {
+    if (!state.syncTimer) return;
+    clearInterval(state.syncTimer);
+    state.syncTimer = null;
+  }
+
+  function initLiveSync() {
+    syncFromSheet();
+    if (document.visibilityState === "visible") startSyncTimer();
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") {
+        syncFromSheet();
+        startSyncTimer();
+      } else {
+        stopSyncTimer();
+      }
+    });
   }
 
   /* ---------- rendering ---------- */
@@ -576,6 +647,79 @@
     return out;
   }
 
+  function paidThisMonth() {
+    var m = currentMonthIndex();
+    if (m < 0 || m >= TOTAL_MONTHS) return [];
+    var out = [];
+    state.members.forEach(function (mm) {
+      var p = paidAt(mm, m);
+      if (p && p.amt > 0) out.push({ sl: mm.sl, name: mm.name });
+    });
+    out.sort(function (a, b) { return a.sl - b.sl; });
+    return out;
+  }
+
+  function formatMissedShort(missedLabels) {
+    if (!missedLabels || !missedLabels.length) return "";
+    var idxs = [];
+    missedLabels.forEach(function (label) {
+      var i = MONTH_LABELS.indexOf(label);
+      if (i >= 0 && idxs.indexOf(i) === -1) idxs.push(i);
+    });
+    idxs.sort(function (a, b) { return a - b; });
+    if (!idxs.length) return "";
+
+    if (idxs.length === 1) return MONTH_LABELS[idxs[0]];
+
+    var consecutive = true;
+    for (var c = 1; c < idxs.length; c++) {
+      if (idxs[c] !== idxs[c - 1] + 1) {
+        consecutive = false;
+        break;
+      }
+    }
+
+    var firstParts = MONTH_LABELS[idxs[0]].split(" ");
+    var lastParts = MONTH_LABELS[idxs[idxs.length - 1]].split(" ");
+    if (consecutive) {
+      if (firstParts[1] === lastParts[1]) {
+        return firstParts[0] + "–" + lastParts[0];
+      }
+      return (
+        firstParts[0] +
+        " " +
+        String(firstParts[1]).slice(-2) +
+        "–" +
+        lastParts[0] +
+        " " +
+        String(lastParts[1]).slice(-2)
+      );
+    }
+
+    var parts = idxs.map(function (idx) {
+      return MONTH_LABELS[idx].split(" ")[0];
+    });
+    if (parts.length <= 3) return parts.join(", ");
+    return parts.slice(0, 3).join(", ") + " +" + (parts.length - 3);
+  }
+
+  function duesChipHtml(items, kind) {
+    if (!items.length) return '<span class="dues-empty">—</span>';
+    return items
+      .map(function (item) {
+        var name = typeof item === "string" ? item : item.name;
+        var months = typeof item === "string" ? "" : item.months || "";
+        var inner =
+          '<span class="dues-chip-name">' + escapeHtml(name) + "</span>";
+        if (months) {
+          inner +=
+            '<span class="dues-chip-m">' + escapeHtml(months) + "</span>";
+        }
+        return '<span class="dues-chip ' + kind + '">' + inner + "</span>";
+      })
+      .join("");
+  }
+
   function renderDuesAlert() {
     if (!els.duesAlert) return;
     var dismissed = false;
@@ -583,30 +727,46 @@
       dismissed = sessionStorage.getItem(DUES_DISMISS_KEY) === "1";
     } catch (e) { /* ignore */ }
 
-    var list = unpaidMembers();
-    if (dismissed || list.length === 0) {
+    var running = currentMonthIndex();
+    if (dismissed || running < 0) {
       els.duesAlert.hidden = true;
-      els.duesList.innerHTML = "";
       return;
     }
 
-    els.duesTitle.textContent =
-      list.length === 1
-        ? "1 member has pending monthly dues"
-        : list.length + " members have pending monthly dues";
+    var pending = unpaidMembers();
+    var paid = paidThisMonth();
+    var schemeEnded = running >= TOTAL_MONTHS;
 
-    var html = "";
-    list.forEach(function (u) {
-      html +=
-        "<li><span class='dues-meta'><strong>" +
-        escapeHtml(u.name) +
-        "</strong> — " +
-        escapeHtml(u.missed.join(", ")) +
-        "</span><span class='dues-owed'>Due ৳" +
-        nf(u.owed) +
-        "</span></li>";
-    });
-    els.duesList.innerHTML = html;
+    if (els.duesPendingLabel) {
+      els.duesPendingLabel.textContent = "Pending (" + pending.length + ")";
+    }
+    if (els.duesPending) {
+      els.duesPending.innerHTML = duesChipHtml(
+        pending.map(function (u) {
+          return { name: u.name, months: formatMissedShort(u.missed) };
+        }),
+        "due"
+      );
+    }
+
+    if (els.duesPaidRow) {
+      if (schemeEnded) {
+        els.duesPaidRow.hidden = true;
+      } else {
+        els.duesPaidRow.hidden = false;
+        var label = MONTH_LABELS[running] || "this month";
+        if (els.duesPaidLabel) {
+          els.duesPaidLabel.textContent = "Paid " + label + " (" + paid.length + ")";
+        }
+        if (els.duesPaidMonth) {
+          els.duesPaidMonth.innerHTML = duesChipHtml(
+            paid.map(function (u) { return { name: u.name }; }),
+            "paid"
+          );
+        }
+      }
+    }
+
     els.duesAlert.hidden = false;
   }
 
@@ -668,15 +828,11 @@
   }
 
   function shouldSkipLiveSync() {
-    return !ADMIN_API_URL && isAdminUnlocked();
+    return false;
   }
 
   function initRefresh() {
     els.refresh.addEventListener("click", function () {
-      if (shouldSkipLiveSync()) {
-        setStatus("idle", "Local admin mode — refresh paused");
-        return;
-      }
       els.refresh.disabled = true;
       els.refresh.classList.add("spin");
       fetchMembers(function (list, kind) {
@@ -720,6 +876,36 @@
     if (!els.adminStatus) return;
     els.adminStatus.textContent = msg || "";
     els.adminStatus.className = "admin-status" + (kind ? " " + kind : "");
+  }
+
+  function showAdminToast(msg, kind) {
+    if (!els.adminToast || !msg) return;
+    els.adminToast.hidden = false;
+    els.adminToast.textContent = msg;
+    els.adminToast.className = "admin-toast" + (kind ? " " + kind : "");
+    if (state.toastTimer) clearTimeout(state.toastTimer);
+    state.toastTimer = setTimeout(function () {
+      els.adminToast.hidden = true;
+      state.toastTimer = null;
+    }, 2500);
+  }
+
+  function requireAdminApi() {
+    if (ADMIN_API_URL) return true;
+    setAdminStatus(ADMIN_API_MISSING, "err");
+    showAdminToast(ADMIN_API_MISSING, "err");
+    return false;
+  }
+
+  function clearBulkPaymentForm() {
+    if (els.adminBulkAmt) els.adminBulkAmt.value = "";
+    if (els.adminBulkLump) els.adminBulkLump.value = "";
+    [els.adminBulkNames, els.adminBulkMonths, els.adminBulkYears].forEach(function (sel) {
+      if (!sel) return;
+      Array.prototype.forEach.call(sel.options, function (opt) {
+        opt.selected = false;
+      });
+    });
   }
 
   function showAdminLoginError(msg) {
@@ -767,67 +953,9 @@
     else els.adminEdit.hidden = true;
   }
 
-  function nextLocalSl() {
-    var max = 0;
-    state.members.forEach(function (mm) {
-      if (mm.sl > max) max = mm.sl;
-    });
-    return max + 1;
-  }
-
-  function applyLocalAdmin(action, payload) {
-    if (action === "addMember") {
-      var name = String(payload.name || "").trim();
-      if (!name) return { ok: false, error: "Name required" };
-      var sl = nextLocalSl();
-      state.members.push({ sl: sl, name: name, paid: [] });
-      return { ok: true, sl: sl, name: name, local: true };
-    }
-    if (action === "renameMember") {
-      var mm = findMemberBySl(parseInt(payload.sl, 10));
-      if (!mm) return { ok: false, error: "Member not found" };
-      var newName = String(payload.name || "").trim();
-      if (!newName) return { ok: false, error: "Name required" };
-      mm.name = newName;
-      return { ok: true, sl: mm.sl, name: newName, local: true };
-    }
-    if (action === "deleteMember") {
-      var delSl = parseInt(payload.sl, 10);
-      var before = state.members.length;
-      state.members = state.members.filter(function (m) { return m.sl !== delSl; });
-      if (state.members.length === before) return { ok: false, error: "Member not found" };
-      return { ok: true, sl: delSl, local: true };
-    }
-    if (action === "setPayments") {
-      var target = findMemberBySl(parseInt(payload.sl, 10));
-      if (!target) return { ok: false, error: "Member not found" };
-      var payments = payload.payments || [];
-      var byM = {};
-      target.paid.forEach(function (p) { byM[p.m] = { m: p.m, amt: p.amt, lump: p.lump || 0 }; });
-      payments.forEach(function (p) {
-        var m = parseInt(p.m, 10);
-        var amt = Number(p.amt) || 0;
-        var lump = Number(p.lump) || 0;
-        if (amt > 0 || lump > 0) byM[m] = { m: m, amt: amt, lump: lump };
-        else delete byM[m];
-      });
-      target.paid = Object.keys(byM)
-        .map(function (k) { return byM[k]; })
-        .sort(function (a, b) { return a.m - b.m; });
-      return { ok: true, sl: target.sl, count: payments.length, local: true };
-    }
-    if (action === "setPayment") {
-      return applyLocalAdmin("setPayments", {
-        sl: payload.sl,
-        payments: [{ m: payload.m, amt: payload.amt, lump: payload.lump }]
-      });
-    }
-    return { ok: false, error: "Unknown action" };
-  }
-
   function adminRequest(action, payload, cb) {
     if (!ADMIN_API_URL) {
-      cb(applyLocalAdmin(action, payload || {}));
+      cb({ ok: false, error: ADMIN_API_MISSING });
       return;
     }
     var body = {};
@@ -861,13 +989,6 @@
   }
 
   function refreshAfterWrite(cb) {
-    if (!ADMIN_API_URL) {
-      render();
-      renderAdminMemberList();
-      if (state.adminSelectedSl != null) selectAdminMember(state.adminSelectedSl);
-      if (cb) cb();
-      return;
-    }
     fetchMembers(function (list, kind) {
       applyLive(list, kind);
       renderAdminMemberList();
@@ -1014,7 +1135,8 @@
       if (ADMIN_API_URL) {
         setAdminStatus("Unlocked — edits write to Google Sheet", "ok");
       } else {
-        setAdminStatus("Local mode — edits stay in this browser only (no Apps Script URL yet)", "ok");
+        setAdminStatus(ADMIN_API_MISSING, "err");
+        showAdminToast(ADMIN_API_MISSING, "err");
       }
     });
 
@@ -1035,6 +1157,7 @@
     });
 
     els.adminAddMember.addEventListener("click", function () {
+      if (!requireAdminApi()) return;
       var name = (els.adminNewName.value || "").trim();
       if (!name) {
         setAdminStatus("Enter a member name", "err");
@@ -1046,10 +1169,12 @@
         els.adminAddMember.disabled = false;
         if (!res.ok) {
           setAdminStatus(res.error || "Add failed", "err");
+          showAdminToast(res.error || "Add failed", "err");
           return;
         }
         els.adminNewName.value = "";
-        setAdminStatus("Added " + name, "ok");
+        setAdminStatus("Added " + name + " to Google Sheet", "ok");
+        showAdminToast("Added " + name + " to Google Sheet", "ok");
         refreshAfterWrite(function () {
           if (res.sl) selectAdminMember(res.sl);
         });
@@ -1057,6 +1182,7 @@
     });
 
     els.adminRename.addEventListener("click", function () {
+      if (!requireAdminApi()) return;
       if (state.adminSelectedSl == null) return;
       var name = (els.adminEditName.value || "").trim();
       if (!name) {
@@ -1069,14 +1195,17 @@
         els.adminRename.disabled = false;
         if (!res.ok) {
           setAdminStatus(res.error || "Rename failed", "err");
+          showAdminToast(res.error || "Rename failed", "err");
           return;
         }
         setAdminStatus("Renamed to " + name, "ok");
+        showAdminToast("Renamed on Google Sheet", "ok");
         refreshAfterWrite();
       });
     });
 
     els.adminDelete.addEventListener("click", function () {
+      if (!requireAdminApi()) return;
       if (state.adminSelectedSl == null) return;
       var mm = findMemberBySl(state.adminSelectedSl);
       var label = mm ? mm.name : "#" + state.adminSelectedSl;
@@ -1087,16 +1216,19 @@
         els.adminDelete.disabled = false;
         if (!res.ok) {
           setAdminStatus(res.error || "Delete failed", "err");
+          showAdminToast(res.error || "Delete failed", "err");
           return;
         }
         state.adminSelectedSl = null;
         els.adminEdit.hidden = true;
         setAdminStatus("Deleted " + label, "ok");
+        showAdminToast("Deleted from Google Sheet", "ok");
         refreshAfterWrite();
       });
     });
 
     els.adminSavePayments.addEventListener("click", function () {
+      if (!requireAdminApi()) return;
       var nameVals = selectedMultiValues(els.adminBulkNames);
       var monthVals = selectedMultiValues(els.adminBulkMonths);
       var yearVals = selectedMultiValues(els.adminBulkYears);
@@ -1126,22 +1258,23 @@
       });
       var slList = nameVals.map(function (v) { return parseInt(v, 10); });
       els.adminSavePayments.disabled = true;
-      setAdminStatus("Saving payments…");
+      setAdminStatus("Saving payments to Google Sheet…");
       saveBulkPaymentsForMembers(slList, payments, function (errors) {
         els.adminSavePayments.disabled = false;
         if (errors.length === slList.length) {
           setAdminStatus("Save failed for all selected members", "err");
+          showAdminToast("Save failed — Google Sheet not updated", "err");
           return;
         }
-        var msg =
-          "Saved for " +
-          (slList.length - errors.length) +
-          " member(s), " +
-          expanded.indexes.length +
-          " month(s)";
+        var msg = "Payments saved to Google Sheet";
         if (expanded.skipped > 0) msg += " · skipped " + expanded.skipped + " out-of-range combo(s)";
         if (errors.length) msg += " · failed: " + errors.join(", ");
         setAdminStatus(msg, errors.length ? "err" : "ok");
+        showAdminToast(
+          errors.length ? msg : "Payments saved to Google Sheet",
+          errors.length ? "err" : "ok"
+        );
+        if (!errors.length) clearBulkPaymentForm();
         refreshAfterWrite();
       });
     });
@@ -1156,10 +1289,7 @@
     initRefresh();
     initDuesDismiss();
     initAdmin();
-    setInterval(function () {
-      if (shouldSkipLiveSync()) return;
-      fetchMembers(function (list, kind) { applyLive(list, kind); });
-    }, 30000);
+    initLiveSync();
   }
 
   if (document.readyState === "loading") {
