@@ -266,23 +266,132 @@
     return rows;
   }
 
-  function fetchMembers(cb) {
+  function looksLikeHtml(txt) {
+    var t = String(txt || "")
+      .trim()
+      .slice(0, 280)
+      .toLowerCase();
+    return (
+      t.indexOf("<!doctype") === 0 ||
+      t.indexOf("<html") === 0 ||
+      t.indexOf("<html") !== -1 ||
+      t.indexOf("<head") !== -1
+    );
+  }
+
+  function fetchMembersViaApi(cb) {
+    if (!ADMIN_API_URL) {
+      cb(null, "offline", "ADMIN_API_URL not set");
+      return;
+    }
+    fetch(ADMIN_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "list" }),
+      redirect: "follow",
+      cache: "no-store"
+    })
+      .then(function (r) {
+        return r.text().then(function (txt) {
+          if (looksLikeHtml(txt)) {
+            throw new Error(
+              "Apps Script needs Allow once — open /exec URL and authorize"
+            );
+          }
+          try {
+            return JSON.parse(txt);
+          } catch (e) {
+            throw new Error(
+              "Bad Apps Script response — Redeploy Web app (New version)"
+            );
+          }
+        });
+      })
+      .then(function (data) {
+        if (!data || !data.ok) {
+          cb(
+            null,
+            "offline",
+            (data && data.error) || "Apps Script list failed"
+          );
+          return;
+        }
+        if (!data.members || !data.members.length) {
+          cb(null, "offline", "Apps Script returned no members (check NAME header)");
+          return;
+        }
+        cb(data.members, "live", null);
+      })
+      .catch(function (err) {
+        cb(
+          null,
+          "offline",
+          err && err.message ? err.message : "Apps Script network error"
+        );
+      });
+  }
+
+  function fetchMembersFromCsv(cb) {
     fetch(CSV_URL, { cache: "no-store" })
       .then(function (r) {
-        if (!r.ok) throw new Error("HTTP " + r.status);
+        if (!r.ok) {
+          throw new Error(
+            "Sheet HTTP " + r.status + " — CSV needs public link or use Apps Script"
+          );
+        }
         return r.text();
       })
       .then(function (txt) {
+        if (looksLikeHtml(txt)) {
+          throw new Error(
+            "Sheet Restricted — use Apps Script list (redeploy Code.gs)"
+          );
+        }
         var list = parseSheetCsv(txt);
-        if (!list || list.length === 0) throw new Error("parse");
-        cb(list, "live");
+        if (!list || list.length === 0) {
+          throw new Error("Sheet parse failed — need a header row with NAME");
+        }
+        cb(list, "live", null);
       })
-      .catch(function () {
+      .catch(function (err) {
+        var csvErr = err && err.message ? err.message : "CSV fetch failed";
         loadViaJsonp(function (tbl) {
-          if (!tbl) { cb(null, "offline"); return; }
-          cb(fromGviz(tbl), "live");
+          if (!tbl) {
+            cb(null, "offline", csvErr);
+            return;
+          }
+          var list = fromGviz(tbl);
+          if (!list || list.length === 0) {
+            cb(null, "offline", csvErr + " · gviz also failed");
+            return;
+          }
+          cb(list, "live", null);
         });
       });
+  }
+
+  function fetchMembers(cb) {
+    // Primary: Apps Script (works with Restricted sheet when Execute as Me)
+    fetchMembersViaApi(function (list, kind, errMsg) {
+      if (list && list.length) {
+        cb(list, kind, null);
+        return;
+      }
+      // Fallback: public CSV / gviz (only if sheet is shared publicly)
+      fetchMembersFromCsv(function (list2, kind2, errMsg2) {
+        if (list2 && list2.length) {
+          cb(list2, kind2, null);
+          return;
+        }
+        cb(
+          null,
+          "offline",
+          errMsg ||
+            errMsg2 ||
+            "Could not load sheet — redeploy Apps Script with list action"
+        );
+      });
+    });
   }
 
   function membersFingerprint(list) {
@@ -303,8 +412,12 @@
     );
   }
 
-  function liveStatusLabel(source) {
-    if (source === "offline") return "Offline — showing last data";
+  function liveStatusLabel(source, errMsg) {
+    if (source === "offline") {
+      return errMsg
+        ? "Offline — " + errMsg
+        : "Offline — showing last data (check sheet sharing)";
+    }
     var now = new Date();
     var hh = ("0" + now.getHours()).slice(-2);
     var mm = ("0" + now.getMinutes()).slice(-2);
@@ -312,10 +425,19 @@
     return "Live · updated " + hh + ":" + mm + ":" + ss;
   }
 
-  function applyLive(list, source) {
-    if (!list || list.length === 0) return;
+  function applyLive(list, source, errMsg) {
+    if (!list || list.length === 0) {
+      setStatus(
+        "offline",
+        liveStatusLabel(
+          "offline",
+          errMsg || "Could not load Google Sheet — Share: Anyone with the link"
+        )
+      );
+      return;
+    }
     var fp = membersFingerprint(list);
-    var label = liveStatusLabel(source);
+    var label = liveStatusLabel(source, errMsg);
     if (fp === state.lastFingerprint) {
       setStatus(source === "offline" ? "offline" : "live", label);
       return;
@@ -326,10 +448,11 @@
     setStatus(source === "offline" ? "offline" : "live", label);
   }
 
-  function syncFromSheet() {
+  function syncFromSheet(force) {
     if (shouldSkipLiveSync()) return;
-    fetchMembers(function (list, kind) {
-      applyLive(list, kind);
+    if (force) state.lastFingerprint = "";
+    fetchMembers(function (list, kind, errMsg) {
+      applyLive(list, kind, errMsg);
     });
   }
 
@@ -835,8 +958,9 @@
     els.refresh.addEventListener("click", function () {
       els.refresh.disabled = true;
       els.refresh.classList.add("spin");
-      fetchMembers(function (list, kind) {
-        applyLive(list, kind);
+      state.lastFingerprint = "";
+      fetchMembers(function (list, kind, errMsg) {
+        applyLive(list, kind, errMsg);
         setTimeout(function () {
           els.refresh.disabled = false;
           els.refresh.classList.remove("spin");
@@ -973,15 +1097,30 @@
     })
       .then(function (r) {
         return r.text().then(function (txt) {
+          if (looksLikeHtml(txt)) {
+            throw new Error(
+              "Apps Script needs Allow once — open the /exec URL in browser and authorize"
+            );
+          }
           try {
             return JSON.parse(txt);
           } catch (e) {
-            throw new Error("Bad response from admin API");
+            throw new Error(
+              "Bad Apps Script response — Redeploy Web app (Anyone) and try again"
+            );
           }
         });
       })
       .then(function (data) {
-        cb(data && typeof data === "object" ? data : { ok: false, error: "Empty response" });
+        if (!data || typeof data !== "object") {
+          cb({ ok: false, error: "Empty response from Apps Script" });
+          return;
+        }
+        if (!data.ok && data.error) {
+          cb({ ok: false, error: String(data.error) });
+          return;
+        }
+        cb(data);
       })
       .catch(function (err) {
         cb({ ok: false, error: err && err.message ? err.message : "Network error" });
@@ -989,8 +1128,9 @@
   }
 
   function refreshAfterWrite(cb) {
-    fetchMembers(function (list, kind) {
-      applyLive(list, kind);
+    state.lastFingerprint = "";
+    fetchMembers(function (list, kind, errMsg) {
+      applyLive(list, kind, errMsg);
       renderAdminMemberList();
       if (state.adminSelectedSl != null) selectAdminMember(state.adminSelectedSl);
       if (cb) cb();
@@ -1103,8 +1243,14 @@
         return;
       }
       var sl = slList[i++];
+      var label = (findMemberBySl(sl) || {}).name || "#" + sl;
       adminRequest("setPayments", { sl: sl, payments: payments }, function (res) {
-        if (!res.ok) errors.push((findMemberBySl(sl) || {}).name || "#" + sl);
+        if (!res.ok) {
+          errors.push({
+            name: label,
+            error: res.error || "Save failed"
+          });
+        }
         next();
       });
     }
@@ -1262,13 +1408,26 @@
       saveBulkPaymentsForMembers(slList, payments, function (errors) {
         els.adminSavePayments.disabled = false;
         if (errors.length === slList.length) {
-          setAdminStatus("Save failed for all selected members", "err");
-          showAdminToast("Save failed — Google Sheet not updated", "err");
+          var failDetail = errors
+            .map(function (e) {
+              return e.name + ": " + e.error;
+            })
+            .join(" · ");
+          setAdminStatus(failDetail, "err");
+          showAdminToast(failDetail, "err");
           return;
         }
         var msg = "Payments saved to Google Sheet";
         if (expanded.skipped > 0) msg += " · skipped " + expanded.skipped + " out-of-range combo(s)";
-        if (errors.length) msg += " · failed: " + errors.join(", ");
+        if (errors.length) {
+          msg +=
+            " · failed: " +
+            errors
+              .map(function (e) {
+                return e.name + " (" + e.error + ")";
+              })
+              .join(", ");
+        }
         setAdminStatus(msg, errors.length ? "err" : "ok");
         showAdminToast(
           errors.length ? msg : "Payments saved to Google Sheet",

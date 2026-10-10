@@ -1,13 +1,17 @@
 /**
- * Balance Sheet Admin API
+ * Balance Sheet API (read + admin write)
  *
  * Setup:
  * 1. Open your Google Sheet → Extensions → Apps Script
  * 2. Paste this file, set ADMIN_PASSWORD below
  * 3. Deploy → New deployment → Web app
- *    - Execute as: Me
+ *    - Execute as: Me  (account that can open the Restricted sheet)
  *    - Who has access: Anyone
  * 4. Copy the web app URL into script.js as ADMIN_API_URL
+ * 5. After any Code.gs change: Deploy → Manage deployments → Edit → New version → Deploy
+ *
+ * Sheet can stay Restricted. Frontend reads via action "list" (no password).
+ * Mutations require ADMIN_PASSWORD.
  *
  * Frontend should POST JSON as text/plain to avoid CORS preflight.
  */
@@ -20,14 +24,20 @@ function doPost(e) {
   try {
     var raw = e && e.postData && e.postData.contents ? e.postData.contents : "{}";
     var body = JSON.parse(raw);
-    if (!body || body.password !== ADMIN_PASSWORD) {
-      return json_({ ok: false, error: "Unauthorized" });
-    }
     var action = String(body.action || "");
     var sheet = getSheet_();
     var meta = findHeader_(sheet);
     if (!meta) {
       return json_({ ok: false, error: "Header row with NAME not found" });
+    }
+
+    // Public read — no password (sheet stays Restricted; script runs as Me)
+    if (action === "list") {
+      return json_(listMembers_(sheet, meta));
+    }
+
+    if (!body || body.password !== ADMIN_PASSWORD) {
+      return json_({ ok: false, error: "Unauthorized" });
     }
 
     switch (action) {
@@ -51,8 +61,25 @@ function doPost(e) {
   }
 }
 
-function doGet() {
-  return json_({ ok: true, message: "Balance sheet admin API. Use POST." });
+function doGet(e) {
+  try {
+    var action =
+      e && e.parameter && e.parameter.action ? String(e.parameter.action) : "";
+    if (action === "list") {
+      var sheet = getSheet_();
+      var meta = findHeader_(sheet);
+      if (!meta) {
+        return json_({ ok: false, error: "Header row with NAME not found" });
+      }
+      return json_(listMembers_(sheet, meta));
+    }
+    return json_({
+      ok: true,
+      message: "Balance sheet API. POST action=list (read) or mutations with password."
+    });
+  } catch (err) {
+    return json_({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
 }
 
 function json_(obj) {
@@ -85,12 +112,59 @@ function findHeader_(sheet) {
   return null;
 }
 
+function cellStr_(v) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "number") {
+    if (!isFinite(v)) return "";
+    return String(Math.floor(v) === v ? Math.floor(v) : v);
+  }
+  return String(v).trim();
+}
+
+function cellNum_(v) {
+  if (v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return isFinite(v) ? v : 0;
+  var n = parseFloat(String(v).replace(/[,"৳\s]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
+function listMembers_(sheet, meta) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < meta.dataStart) return { ok: true, members: [] };
+
+  var lastCol = Math.max(sheet.getLastColumn(), 2 + TOTAL_MONTHS * 2);
+  var values = sheet
+    .getRange(meta.dataStart, 1, lastRow, lastCol)
+    .getValues();
+  var members = [];
+
+  for (var i = 0; i < values.length; i++) {
+    var f = values[i];
+    var f0 = cellStr_(f[0]);
+    if (f0.toUpperCase() === "TOTAL") break;
+    if (!f0 || !/^\d+$/.test(f0)) continue;
+    var name = cellStr_(f[1]);
+    if (!name) continue;
+
+    var paid = [];
+    for (var m = 0; m < TOTAL_MONTHS; m++) {
+      var mc = 2 + m * 2;
+      var lc = mc + 1;
+      var amt = cellNum_(f[mc]);
+      var lump = cellNum_(f[lc]);
+      if (amt > 0 || lump > 0) paid.push({ m: m, amt: amt, lump: lump });
+    }
+    members.push({ sl: parseInt(f0, 10), name: name, paid: paid });
+  }
+  return { ok: true, members: members };
+}
+
 function findMemberRow_(sheet, meta, sl) {
   var lastRow = sheet.getLastRow();
   if (lastRow < meta.dataStart) return -1;
   var values = sheet.getRange(meta.dataStart, 1, lastRow, 2).getValues();
   for (var i = 0; i < values.length; i++) {
-    var f0 = String(values[i][0] || "").trim();
+    var f0 = cellStr_(values[i][0]);
     if (f0.toUpperCase() === "TOTAL") break;
     if (f0 === String(sl)) return meta.dataStart + i;
   }
@@ -103,7 +177,7 @@ function nextSl_(sheet, meta) {
   if (lastRow >= meta.dataStart) {
     var values = sheet.getRange(meta.dataStart, 1, lastRow, 1).getValues();
     for (var i = 0; i < values.length; i++) {
-      var f0 = String(values[i][0] || "").trim();
+      var f0 = cellStr_(values[i][0]);
       if (f0.toUpperCase() === "TOTAL") break;
       if (/^\d+$/.test(f0)) {
         var n = parseInt(f0, 10);
@@ -119,7 +193,7 @@ function findInsertRow_(sheet, meta) {
   if (lastRow < meta.dataStart) return meta.dataStart;
   var values = sheet.getRange(meta.dataStart, 1, lastRow, 1).getValues();
   for (var i = 0; i < values.length; i++) {
-    var f0 = String(values[i][0] || "").trim();
+    var f0 = cellStr_(values[i][0]);
     if (f0.toUpperCase() === "TOTAL") return meta.dataStart + i;
   }
   return lastRow + 1;
